@@ -1,4 +1,5 @@
 import { GoogleGenAI } from "@google/genai";
+import { searchAudiusTracks, type AudiusTrack } from "./audiusService";
 
 let aiInstance: GoogleGenAI | null = null;
 
@@ -28,6 +29,10 @@ export interface TrackRecommendation {
   tags: string[];
   releaseDate: string;
   previewUrl: string;
+  /** Direct streamable audio URL (e.g. Audius). When set, the deck plays this in <audio>. */
+  streamUrl?: string;
+  /** Source label for UI badges (e.g. "Audius", "Gemini"). */
+  source?: string;
   imageUrl?: string;
   isLiked?: boolean;
   isDisliked?: boolean;
@@ -117,4 +122,62 @@ export const getTrackRecommendations = async (genrePreference: string): Promise<
     console.error("Gemini Error:", error);
     return [];
   }
+};
+
+const AGENT_BY_GENRE: Array<{ match: RegExp; label: string }> = [
+  { match: /bass|dnb|drum/i, label: 'BASS ENHANCER' },
+  { match: /house|tech|techno/i, label: 'SYNC MASTER' },
+  { match: /hip[\s-]?hop|rap|trap/i, label: 'RHYTHM REFINER' },
+  { match: /ambient|chill|lofi|lo-fi/i, label: 'AMBIENT SOUL' },
+  { match: /vocal|pop|r&b|rnb/i, label: 'VOCAL REFINER' },
+  { match: /electronic|edm|synth/i, label: 'HARMONIC SYNC' },
+  { match: /rock|metal|punk/i, label: 'DISTORTION CORE' },
+  { match: /jazz|funk|soul/i, label: 'GROOVE ARCHIVIST' },
+];
+
+function pickAgentLabel(track: AudiusTrack, fallbackIndex: number): string {
+  const haystack = `${track.genre} ${track.tags.join(' ')}`;
+  for (const { match, label } of AGENT_BY_GENRE) {
+    if (match.test(haystack)) return label;
+  }
+  const rotation = ['AUTO-CURATOR', 'NEURAL SCOUT', 'CRATE DIGGER', 'WAVEFORM SAGE'];
+  return rotation[fallbackIndex % rotation.length];
+}
+
+function audiusToRecommendation(track: AudiusTrack, index: number, queryGenre: string): TrackRecommendation {
+  return {
+    id: makeTrackId(track.title, track.artist),
+    title: track.title,
+    artist: track.artist,
+    genre: track.genre && track.genre !== 'Unknown' ? track.genre : queryGenre,
+    agentLabel: pickAgentLabel(track, index),
+    confidence: 0.92,
+    tags: track.tags.slice(0, 3),
+    releaseDate: '',
+    previewUrl: track.permalink ?? track.streamUrl,
+    streamUrl: track.streamUrl,
+    source: 'Audius',
+    imageUrl: track.artworkUrl,
+  };
+}
+
+/**
+ * Search the free Audius music library for playable tracks.
+ * Falls back to the Gemini curation agent if Audius returns nothing
+ * (e.g. offline, or no matches). Audius results have `streamUrl` set so
+ * the deck can play them directly.
+ */
+export const searchPlayableTracks = async (
+  query: string,
+  limit = 8,
+): Promise<TrackRecommendation[]> => {
+  try {
+    const audius = await searchAudiusTracks(query, limit);
+    if (audius.length > 0) {
+      return audius.map((t, i) => audiusToRecommendation(t, i, query));
+    }
+  } catch (err) {
+    console.warn('Audius search failed, falling back to Gemini:', err);
+  }
+  return getTrackRecommendations(query);
 };
