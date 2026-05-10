@@ -38,6 +38,8 @@ import { MixerKnob } from './components/MixerKnob';
 import { TrackLayer, TrackData } from './components/TrackLayer';
 import { searchPlayableTracks, TrackRecommendation } from './services/musicService';
 import { dispatch as dispatchWebhook } from './services/webhookService';
+import { WeatherChip } from './components/WeatherChip';
+import { WeatherReading, summarizeForPrompt } from './services/weatherService';
 import { PlaylistPanel } from './components/PlaylistPanel';
 import { generateTrackArtwork, generateAgentAvatar } from './services/imageService';
 import { JulesAgent } from './components/JulesAgent';
@@ -184,6 +186,8 @@ export default function App() {
   useEffect(() => {
     persistReputations(agentReputations);
   }, [agentReputations]);
+
+  const [weatherReading, setWeatherReading] = useState<WeatherReading | null>(null);
 
   const AGENT_LIKE_BONUS = 50;
 
@@ -635,10 +639,15 @@ export default function App() {
     if (briefing) {
       addLog('AGENT-RANK', 'Injecting agent reputation briefing into recommender context.', 'info');
     }
+    const weatherContext = weatherReading ? summarizeForPrompt(weatherReading) : undefined;
+    if (weatherContext) {
+      addLog('WEATHER', `Ambient context: ${weatherContext}.`, 'info');
+    }
     const recs = await searchPlayableTracks(
       `${query}${searchMode === 'LOCAL' ? ' (local recording style)' : ''}`,
       8,
       briefing,
+      weatherContext,
     );
     const hydrated = recs.map(rec => {
       const liked = prefs.liked.find(t => t.id === rec.id);
@@ -1010,6 +1019,7 @@ export default function App() {
             motionState={motionState}
             onEnableMotion={enableMotion}
             onDisableMotion={disableMotion}
+            onWeatherReading={setWeatherReading}
             isMobile={true}
           />
         </div>
@@ -1131,6 +1141,7 @@ function AppContent({
   motionState,
   onEnableMotion,
   onDisableMotion,
+  onWeatherReading,
   isMobile = false
 }: any) {
   const { soundEnabled, setSoundEnabled, notificationsEnabled, setNotificationsEnabled, playSound } = useAppFeedback();
@@ -1345,6 +1356,7 @@ function AppContent({
               <span className="ml-3 text-[10px] font-mono font-bold text-jarvis-accent-pink tracking-widest leading-none">LV 4</span>
             </div>
             <div className="flex items-center gap-3 relative">
+              <WeatherChip theme={theme} onReading={onWeatherReading} />
               <button
                 onClick={() => {
                   playSound('click');
@@ -1410,6 +1422,7 @@ function AppContent({
         }`}>
            <Logo className="scale-90 origin-left" />
            <div className="flex items-center gap-3 relative">
+              <WeatherChip theme={theme} onReading={onWeatherReading} />
               <button
                 onClick={() => {
                   playSound('toggle');

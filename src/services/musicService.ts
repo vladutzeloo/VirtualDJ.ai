@@ -60,10 +60,14 @@ export interface TrackRecommendation {
 export const makeTrackId = (title: string, artist: string): string =>
   `${title}::${artist}`.toLowerCase().replace(/\s+/g, '-').slice(0, 120);
 
-const RECOMMENDATION_PROMPT = (genrePreference: string, agentBriefing?: string) => `You are a DJ-curation agent with live web access. Use Google Search to find REAL, currently-released ${genrePreference} tracks (prefer the last 24 months when possible). Verify titles, artists and release dates against the web.
+const RECOMMENDATION_PROMPT = (
+  genrePreference: string,
+  agentBriefing?: string,
+  weatherContext?: string,
+) => `You are a DJ-curation agent with live web access. Use Google Search to find REAL, currently-released ${genrePreference} tracks (prefer the last 24 months when possible). Verify titles, artists and release dates against the web.
 
 For each of 5 tracks, assign a specialized AI Agent persona (e.g. "Bass Enhancer", "Vocal Refiner", "Harmonic Sync", "Sync Master", "Ambient Soul").
-${agentBriefing ? `\nBefore deciding which agent persona to assign, read the user's persona reputation briefing below and prefer agents the user has TRUSTED. Avoid reusing personas the user has flagged AVOID.\n\n${agentBriefing}\n` : ''}
+${agentBriefing ? `\nBefore deciding which agent persona to assign, read the user's persona reputation briefing below and prefer agents the user has TRUSTED. Avoid reusing personas the user has flagged AVOID.\n\n${agentBriefing}\n` : ''}${weatherContext ? `\nAmbient context: it is currently ${weatherContext}. Lean the energy, mood and tempo of your picks into this vibe — sunny daytime calls for brighter, higher-energy tracks; rainy or night conditions favour moodier, slower, more atmospheric picks.\n` : ''}
 
 Return ONLY a single JSON array (no prose, no markdown fences) of 5 objects with this exact shape:
 [
@@ -97,19 +101,20 @@ function extractJsonArray(raw: string): unknown {
 export const getTrackRecommendations = async (
   genrePreference: string,
   agentBriefing?: string,
+  weatherContext?: string,
 ): Promise<TrackRecommendation[]> => {
   try {
     const ai = getAI();
     const response = await ai.models.generateContent({
       model: "gemini-3-flash-preview",
-      contents: RECOMMENDATION_PROMPT(genrePreference, agentBriefing),
+      contents: RECOMMENDATION_PROMPT(genrePreference, agentBriefing, weatherContext),
       config: {
         tools: [{ googleSearch: {} }],
       },
     });
 
     const text = response.text;
-    const promptText = RECOMMENDATION_PROMPT(genrePreference);
+    const promptText = RECOMMENDATION_PROMPT(genrePreference, agentBriefing, weatherContext);
     const reported = usageMetadataTokens(response);
     recordUsage({
       provider: 'gemini',
@@ -200,6 +205,7 @@ export const searchPlayableTracks = async (
   query: string,
   limit = 8,
   agentBriefing?: string,
+  weatherContext?: string,
 ): Promise<TrackRecommendation[]> => {
   try {
     const audius = await searchAudiusTracks(query, limit);
@@ -209,5 +215,5 @@ export const searchPlayableTracks = async (
   } catch (err) {
     console.warn('Audius search failed, falling back to Gemini:', err);
   }
-  return getTrackRecommendations(query, agentBriefing);
+  return getTrackRecommendations(query, agentBriefing, weatherContext);
 };
