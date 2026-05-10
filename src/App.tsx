@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from "motion/react";
 import { 
   Radio, 
@@ -134,6 +134,107 @@ export default function App() {
     }, ...prev].slice(0, 50));
   };
 
+  // Audio playback engine — single shared HTMLAudioElement, one track at a time.
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const blobUrlsRef = useRef<Set<string>>(new Set());
+  const [playback, setPlayback] = useState<{ id: string | null; currentTime: number; duration: number }>({
+    id: null,
+    currentTime: 0,
+    duration: 0,
+  });
+
+  useEffect(() => {
+    const audio = new Audio();
+    audio.preload = 'metadata';
+    audioRef.current = audio;
+
+    const onTime = () => setPlayback(p => ({ ...p, currentTime: audio.currentTime }));
+    const onMeta = () => setPlayback(p => ({ ...p, duration: isFinite(audio.duration) ? audio.duration : 0 }));
+    const onEnd = () => {
+      setPlayback({ id: null, currentTime: 0, duration: 0 });
+      setTracks(prev => prev.map(t => ({ ...t, isPlaying: false })));
+      setLocalTracks(prev => prev.map(t => ({ ...t, isPlaying: false })));
+    };
+    const onErr = () => {
+      addLog('SYSTEM', 'Audio decode error — source may not be a direct audio file.', 'warn');
+      setPlayback({ id: null, currentTime: 0, duration: 0 });
+      setTracks(prev => prev.map(t => ({ ...t, isPlaying: false })));
+      setLocalTracks(prev => prev.map(t => ({ ...t, isPlaying: false })));
+    };
+
+    audio.addEventListener('timeupdate', onTime);
+    audio.addEventListener('loadedmetadata', onMeta);
+    audio.addEventListener('durationchange', onMeta);
+    audio.addEventListener('ended', onEnd);
+    audio.addEventListener('error', onErr);
+
+    return () => {
+      audio.pause();
+      audio.removeEventListener('timeupdate', onTime);
+      audio.removeEventListener('loadedmetadata', onMeta);
+      audio.removeEventListener('durationchange', onMeta);
+      audio.removeEventListener('ended', onEnd);
+      audio.removeEventListener('error', onErr);
+      audio.src = '';
+      blobUrlsRef.current.forEach(u => URL.revokeObjectURL(u));
+      blobUrlsRef.current.clear();
+    };
+  }, []);
+
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    audio.volume = Math.max(0, Math.min(1, mixerValues.volume / 100));
+  }, [mixerValues.volume]);
+
+  const stopAllPlayingFlags = () => {
+    setTracks(prev => prev.map(t => ({ ...t, isPlaying: false })));
+    setLocalTracks(prev => prev.map(t => ({ ...t, isPlaying: false })));
+  };
+
+  const playTrack = (track: TrackData) => {
+    const audio = audioRef.current;
+    if (!audio) return;
+
+    if (!track.audioUrl) {
+      if (track.previewUrl) {
+        addLog(track.agentLabel, `No direct stream for "${track.title}" — opening external preview.`, 'warn');
+        window.open(track.previewUrl, '_blank', 'noopener,noreferrer');
+      } else {
+        addLog('SYSTEM', `"${track.title}" has no audio source. Drop an audio file to play it.`, 'warn');
+      }
+      return;
+    }
+
+    const switchSource = audio.src !== track.audioUrl;
+    if (switchSource) {
+      audio.src = track.audioUrl;
+      setPlayback({ id: track.id, currentTime: 0, duration: 0 });
+    }
+    audio.volume = Math.max(0, Math.min(1, mixerValues.volume / 100));
+
+    audio.play()
+      .then(() => {
+        setPlayback(p => ({ ...p, id: track.id }));
+        setTracks(prev => prev.map(t => ({ ...t, isPlaying: t.id === track.id })));
+        setLocalTracks(prev => prev.map(t => ({ ...t, isPlaying: t.id === track.id })));
+        setUsage(p => ({ ...p, tracksPlayed: p.tracksPlayed + 1 }));
+        addLog(track.agentLabel, `Playing: ${track.title}`, 'success');
+      })
+      .catch(err => {
+        addLog('SYSTEM', `Playback failed: ${err?.message ?? 'unknown error'}`, 'warn');
+        stopAllPlayingFlags();
+      });
+  };
+
+  const pausePlayback = (track: TrackData) => {
+    audioRef.current?.pause();
+    setTracks(prev => prev.map(t => t.id === track.id ? { ...t, isPlaying: false } : t));
+    setLocalTracks(prev => prev.map(t => t.id === track.id ? { ...t, isPlaying: false } : t));
+    setPlayback(p => ({ ...p, id: null }));
+    addLog(track.agentLabel, `Paused: ${track.title}`, 'info');
+  };
+
   const fetchSuggestions = async (query: string) => {
     setLoadingSuggestions(true);
     setUsage(prev => ({ ...prev, searchesRun: prev.searchesRun + 1 }));
@@ -177,20 +278,22 @@ export default function App() {
   }, []);
 
   const togglePlay = (id: string) => {
-    const track = tracks.find(t => t.id === id);
+    const track = tracks.find(t => t.id === id) ?? localTracks.find(t => t.id === id);
     if (!track) return;
-    addLog(track.agentLabel, `${track.isPlaying ? 'Paused' : 'Playing'} track: ${track.title}`, track.isPlaying ? 'info' : 'success');
-    if (!track.isPlaying) {
-      setUsage(prev => ({ ...prev, tracksPlayed: prev.tracksPlayed + 1 }));
+    if (track.isPlaying) {
+      pausePlayback(track);
+    } else {
+      playTrack(track);
     }
-    setTracks(prev => prev.map(t => t.id === id ? { ...t, isPlaying: !t.isPlaying } : t));
   };
 
   const addTrack = (rec: TrackRecommendation, notes?: string) => {
     addLog('JULES', `Deploying agent "${rec.agentLabel}" to new track: ${rec.title}${notes ? ' (with neural notes)' : ''}`, 'info');
     setUsage(prev => ({ ...prev, agentsDeployed: prev.agentsDeployed + 1 }));
     setIsDeploying(true);
-    
+
+    const isDirectAudio = /\.(mp3|wav|ogg|m4a|aac|flac|opus)(\?|#|$)/i.test(rec.previewUrl ?? '');
+
     // Simulate planning state
     setTimeout(() => {
       const newTrack: TrackData = {
@@ -200,31 +303,63 @@ export default function App() {
         agentLabel: rec.agentLabel,
         duration: '03:45',
         isPlaying: false,
-        color: tracks.length % 2 === 0 ? 'cyan' : 'pink'
+        color: tracks.length % 2 === 0 ? 'cyan' : 'pink',
+        audioUrl: isDirectAudio ? rec.previewUrl : undefined,
+        previewUrl: rec.previewUrl,
       };
       setTracks(prev => [...prev, newTrack]);
       setIsDeploying(false);
       if (notes) addLog(rec.agentLabel, `Notes integration: ${notes.slice(0, 50)}...`, 'success');
-      addLog(rec.agentLabel, `Track successfully integrated into the mix.`, 'success');
+      addLog(
+        rec.agentLabel,
+        isDirectAudio
+          ? `Track ready to play in the deck.`
+          : `Added — preview only (no direct audio stream).`,
+        'success'
+      );
     }, 1500);
   };
 
   const handleFileUpload = (files: FileList | null) => {
     if (!files) return;
     addLog('SYSTEM', `Analyzing ${files.length} uploaded files...`, 'info');
-    
+
     Array.from(files).forEach(file => {
+      if (!file.type.startsWith('audio/')) {
+        addLog('UPLOADER', `Skipped "${file.name}" — not an audio file.`, 'warn');
+        return;
+      }
+      const url = URL.createObjectURL(file);
+      blobUrlsRef.current.add(url);
+      const id = Math.random().toString(36).substr(2, 9);
       const newLocalTrack: TrackData = {
-        id: Math.random().toString(36).substr(2, 9),
-        title: file.name.replace(/\.[^/.]+$/, ""),
+        id,
+        title: file.name.replace(/\.[^/.]+$/, ''),
         artist: 'User Upload',
         agentLabel: 'UPLOADER',
         duration: '??:??',
         isPlaying: false,
-        color: 'emerald'
+        color: 'emerald',
+        audioUrl: url,
       };
+
+      // Probe duration for nicer display.
+      const probe = new Audio();
+      probe.preload = 'metadata';
+      probe.src = url;
+      probe.addEventListener('loadedmetadata', () => {
+        if (!isFinite(probe.duration)) return;
+        const m = Math.floor(probe.duration / 60);
+        const s = Math.floor(probe.duration % 60).toString().padStart(2, '0');
+        const pretty = `${m.toString().padStart(2, '0')}:${s}`;
+        setLocalTracks(prev => prev.map(t => t.id === id ? { ...t, duration: pretty } : t));
+        setTracks(prev => prev.map(t => t.id === id ? { ...t, duration: pretty } : t));
+      });
+
       setLocalTracks(prev => [newLocalTrack, ...prev]);
-      addLog('UPLOADER', `Track "${file.name}" imported to local library.`, 'success');
+      // Also add to the deck so it's reachable from the mobile UI which has no sidebar.
+      setTracks(prev => [...prev, { ...newLocalTrack, color: prev.length % 2 === 0 ? 'cyan' : 'pink' }]);
+      addLog('UPLOADER', `Imported "${file.name}" — ready to play.`, 'success');
     });
   };
 
@@ -283,7 +418,7 @@ export default function App() {
           theme === 'dark' ? 'bg-black border-white/10' : 'bg-white border-slate-200'
         } lg:rounded-[3.5rem] lg:shadow-2xl`}>
           <AIBrain searching={loadingSuggestions} deploying={isDeploying} offline={isOffline} theme={theme} />
-          <AppContent 
+          <AppContent
             theme={theme}
             setTheme={setTheme}
             isVaultOpen={isVaultOpen}
@@ -291,6 +426,7 @@ export default function App() {
             activeTab={activeTab}
             setActiveTab={setActiveTab}
             tracks={tracks}
+            playback={playback}
             suggestions={suggestions}
             loadingSuggestions={loadingSuggestions}
             selectedTrack={selectedTrack}
@@ -351,14 +487,15 @@ export default function App() {
 }
 
 // Sub-component for the main app content to avoid repeating logic
-function AppContent({ 
+function AppContent({
   theme,
   setTheme,
   isVaultOpen,
   setIsVaultOpen,
-  activeTab, 
-  setActiveTab, 
-  tracks, 
+  activeTab,
+  setActiveTab,
+  tracks,
+  playback,
   suggestions, 
   loadingSuggestions, 
   selectedTrack, 
@@ -734,9 +871,28 @@ function AppContent({
                </h3>
                <div className="flex flex-col gap-1 max-h-32 overflow-y-auto pr-1 custom-scrollbar">
                   {localTracks.map((lt: any) => (
-                    <div key={lt.id} className="p-2 rounded bg-slate-900/50 border border-jarvis-border/20 flex flex-col hover:border-jarvis-accent-cyan/30 cursor-pointer">
-                      <span className="text-[10px] font-bold text-slate-300 truncate">{lt.title}</span>
-                      <span className="text-[8px] font-mono text-slate-500 uppercase">IMPORTED FILE</span>
+                    <div
+                      key={lt.id}
+                      className="p-2 rounded bg-slate-900/50 border border-jarvis-border/20 flex items-center gap-2 hover:border-jarvis-accent-cyan/30"
+                    >
+                      <button
+                        onClick={() => togglePlay(lt.id)}
+                        disabled={!lt.audioUrl}
+                        title={lt.audioUrl ? (lt.isPlaying ? 'Pause' : 'Play') : 'No audio source'}
+                        className={`w-7 h-7 shrink-0 rounded-full flex items-center justify-center border transition-all ${
+                          lt.audioUrl
+                            ? 'bg-jarvis-accent-cyan/20 border-jarvis-accent-cyan/40 text-jarvis-accent-cyan hover:bg-jarvis-accent-cyan/30 active:scale-95'
+                            : 'bg-slate-800 border-slate-700 text-slate-600 cursor-not-allowed'
+                        }`}
+                      >
+                        {lt.isPlaying ? <span className="text-[10px]">❚❚</span> : <span className="text-[10px] ml-0.5">▶</span>}
+                      </button>
+                      <div className="flex flex-col min-w-0 flex-1">
+                        <span className="text-[10px] font-bold text-slate-300 truncate">{lt.title}</span>
+                        <span className="text-[8px] font-mono text-slate-500 uppercase">
+                          {lt.audioUrl ? lt.duration : 'IMPORTED FILE'}
+                        </span>
+                      </div>
                     </div>
                   ))}
                   <label className="py-2 border border-dashed border-jarvis-border/50 rounded text-[9px] font-mono text-slate-600 hover:text-slate-400 hover:border-jarvis-border transition-all mt-1 cursor-pointer text-center block">
@@ -907,12 +1063,14 @@ function AppContent({
                    </button>
                 </div>
                 <div className="flex flex-col gap-2">
-                   {tracks.map(track => (
-                     <TrackLayer 
-                       key={track.id} 
-                       title={track.id === '1' ? 'Layer A' : 'Layer B'} 
+                   {tracks.map((track, i) => (
+                     <TrackLayer
+                       key={track.id}
+                       title={`Layer ${String.fromCharCode(65 + i)}`}
                        track={track}
                        onPlayToggle={() => togglePlay(track.id)}
+                       currentTime={playback.id === track.id ? playback.currentTime : 0}
+                       totalSeconds={playback.id === track.id ? playback.duration : 0}
                      />
                    ))}
                 </div>

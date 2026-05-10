@@ -10,15 +10,28 @@ export interface TrackData {
   isPlaying: boolean;
   color: string;
   liked?: boolean;
+  audioUrl?: string;
+  previewUrl?: string;
 }
 
 interface TrackLayerProps {
   title: string;
   track?: TrackData;
   onPlayToggle?: () => void;
+  currentTime?: number;
+  totalSeconds?: number;
 }
 
-export const TrackLayer = ({ title, track, onPlayToggle }: TrackLayerProps) => {
+const formatTime = (sec: number) => {
+  if (!isFinite(sec) || sec < 0) return '00:00';
+  const m = Math.floor(sec / 60);
+  const s = Math.floor(sec % 60).toString().padStart(2, '0');
+  return `${m.toString().padStart(2, '0')}:${s}`;
+};
+
+export const TrackLayer = ({ title, track, onPlayToggle, currentTime = 0, totalSeconds = 0 }: TrackLayerProps) => {
+  const hasRealTime = totalSeconds > 0;
+  const progressPct = hasRealTime ? Math.min(100, (currentTime / totalSeconds) * 100) : 0;
   return (
     <div className="flex flex-col gap-2 p-4 glass rounded-xl bg-jarvis-card relative overflow-hidden group">
       {/* Background visualizer simulation */}
@@ -97,15 +110,24 @@ export const TrackLayer = ({ title, track, onPlayToggle }: TrackLayerProps) => {
       )}
 
       <div className="flex items-center gap-2 mt-2 relative z-10">
-        <span className="text-[9px] font-mono opacity-50">02:44</span>
+        <span className="text-[9px] font-mono opacity-50">{hasRealTime ? formatTime(currentTime) : '00:00'}</span>
         <div className="flex-1 h-1 bg-slate-800 rounded-full relative overflow-hidden">
-          <motion.div 
-            className="absolute inset-y-0 left-0 bg-gradient-to-r from-jarvis-accent-cyan to-jarvis-accent-pink"
-            animate={{ width: track?.isPlaying ? "100%" : "40%" }}
-            transition={{ duration: track?.isPlaying ? 120 : 0.5, ease: "linear" }}
-          />
+          {hasRealTime ? (
+            <div
+              className="absolute inset-y-0 left-0 bg-gradient-to-r from-jarvis-accent-cyan to-jarvis-accent-pink transition-[width] duration-200 ease-linear"
+              style={{ width: `${progressPct}%` }}
+            />
+          ) : (
+            <motion.div
+              className="absolute inset-y-0 left-0 bg-gradient-to-r from-jarvis-accent-cyan to-jarvis-accent-pink"
+              animate={{ width: track?.isPlaying ? '100%' : '40%' }}
+              transition={{ duration: track?.isPlaying ? 120 : 0.5, ease: 'linear' }}
+            />
+          )}
         </div>
-        <span className="text-[9px] font-mono opacity-50">{track?.duration || "00:00"}</span>
+        <span className="text-[9px] font-mono opacity-50">
+          {hasRealTime ? formatTime(totalSeconds) : track?.duration || '00:00'}
+        </span>
       </div>
     </div>
   );
