@@ -1,0 +1,6 @@
+{
+  "name": "VirtualDJ.AI",
+  "description": "Professional AI-powered DJ workstation with Neural Vault security, artist discovery signals, Gym optimization mode, and AI Vision analysis.",
+  "requestFramePermissions": ["camera"],
+  "majorCapabilities": []
+}
