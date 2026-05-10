@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from "motion/react";
 import { 
   Radio, 
@@ -14,6 +14,8 @@ import {
   Music,
   Disc,
   Heart,
+  ThumbsDown,
+  ListMusic,
   Plus,
   Trash2,
   Bot,
@@ -32,6 +34,7 @@ import { StatItem } from './components/StatItem';
 import { MixerKnob } from './components/MixerKnob';
 import { TrackLayer, TrackData } from './components/TrackLayer';
 import { getTrackRecommendations, TrackRecommendation } from './services/musicService';
+import { PlaylistPanel } from './components/PlaylistPanel';
 import { generateTrackArtwork, generateAgentAvatar } from './services/imageService';
 import { JulesAgent } from './components/JulesAgent';
 import { TrackModal } from './components/TrackModal';
@@ -47,10 +50,12 @@ import { Vault } from './components/Vault';
 
 import { Logo } from './components/Logo';
 import { DeviceIdentity } from './components/DeviceIdentity';
+import { MotionControls } from './components/MotionControls';
 import { useDeviceTelemetry } from './hooks/useDeviceTelemetry';
 import { useAppFeedback } from './hooks/useAppFeedback';
 import { NotificationCenter } from './components/NotificationCenter';
 import { BellOff, Volume1, VolumeX } from 'lucide-react';
+import { useMotionControls, vibrate } from './hooks/useMotionControls';
 
 const STATIONS = [
   { id: 'sw', label: 'Synthwave', sub: 'SYNTHWAVE', color: 'bg-pink-600/20 text-pink-400 border-pink-500/30' },
@@ -104,6 +109,117 @@ export default function App() {
   const [suggestions, setSuggestions] = useState<TrackRecommendation[]>([]);
   const [loadingSuggestions, setLoadingSuggestions] = useState(false);
   const [selectedTrack, setSelectedTrack] = useState<TrackRecommendation | null>(null);
+
+  const PREFS_STORAGE_KEY = 'vdj.songPreferences.v1';
+  type StoredPrefs = {
+    playlist: TrackRecommendation[];
+    liked: TrackRecommendation[];
+    disliked: TrackRecommendation[];
+  };
+  const [prefs, setPrefs] = useState<StoredPrefs>(() => {
+    if (typeof window === 'undefined') return { playlist: [], liked: [], disliked: [] };
+    try {
+      const raw = window.localStorage.getItem(PREFS_STORAGE_KEY);
+      if (!raw) return { playlist: [], liked: [], disliked: [] };
+      const parsed = JSON.parse(raw);
+      return {
+        playlist: Array.isArray(parsed.playlist) ? parsed.playlist : [],
+        liked: Array.isArray(parsed.liked) ? parsed.liked : [],
+        disliked: Array.isArray(parsed.disliked) ? parsed.disliked : [],
+      };
+    } catch {
+      return { playlist: [], liked: [], disliked: [] };
+    }
+  });
+  const [isPlaylistOpen, setIsPlaylistOpen] = useState(false);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      window.localStorage.setItem(PREFS_STORAGE_KEY, JSON.stringify(prefs));
+    } catch {
+      /* storage full or disabled */
+    }
+  }, [prefs]);
+
+  const upsertPref = (
+    bucket: 'liked' | 'disliked' | 'playlist',
+    track: TrackRecommendation,
+  ) => {
+    setPrefs(prev => {
+      const without = prev[bucket].filter(t => t.id !== track.id);
+      return { ...prev, [bucket]: [{ ...track }, ...without] };
+    });
+  };
+  const removePref = (bucket: 'liked' | 'disliked' | 'playlist', id: string) => {
+    setPrefs(prev => ({ ...prev, [bucket]: prev[bucket].filter(t => t.id !== id) }));
+  };
+
+  const setVerdict = (
+    rec: TrackRecommendation,
+    verdict: 'like' | 'dislike' | 'clear',
+  ) => {
+    const reason =
+      verdict === 'clear'
+        ? undefined
+        : window.prompt(
+            verdict === 'like'
+              ? 'Why do you like this track? (optional — helps the agent learn)'
+              : "What's off about this track? (optional — helps the agent learn)",
+          ) ?? undefined;
+
+    setSuggestions(prev =>
+      prev.map(s =>
+        s.id === rec.id
+          ? {
+              ...s,
+              isLiked: verdict === 'like',
+              isDisliked: verdict === 'dislike',
+              feedbackReason: verdict === 'clear' ? undefined : reason ?? s.feedbackReason,
+            }
+          : s,
+      ),
+    );
+
+    if (verdict === 'clear') {
+      removePref('liked', rec.id);
+      removePref('disliked', rec.id);
+      addLog('TASTE-AGENT', `Cleared verdict for "${rec.title}".`, 'info');
+      return;
+    }
+
+    const updated: TrackRecommendation = {
+      ...rec,
+      isLiked: verdict === 'like',
+      isDisliked: verdict === 'dislike',
+      feedbackReason: reason,
+    };
+    if (verdict === 'like') {
+      removePref('disliked', rec.id);
+      upsertPref('liked', updated);
+      onLikeIncrement();
+      addLog('TASTE-AGENT', `Liked "${rec.title}". Updating taste profile.`, 'success');
+    } else {
+      removePref('liked', rec.id);
+      upsertPref('disliked', updated);
+      addLog('TASTE-AGENT', `Disliked "${rec.title}". Updating taste profile.`, 'warn');
+    }
+  };
+
+  const sendToPlaylist = (rec: TrackRecommendation) => {
+    if (prefs.playlist.some(t => t.id === rec.id)) {
+      addLog('PLAYLIST', `"${rec.title}" already in playlist.`, 'info');
+      return;
+    }
+    upsertPref('playlist', { ...rec, inPlaylist: true });
+    setSuggestions(prev =>
+      prev.map(s => (s.id === rec.id ? { ...s, inPlaylist: true } : s)),
+    );
+    addLog('PLAYLIST', `Sent "${rec.title}" to playlist.`, 'success');
+  };
+
+  const onLikeIncrement = () =>
+    setUsage(prev => ({ ...prev, tracksLiked: prev.tracksLiked + 1 }));
   const [isDeploying, setIsDeploying] = useState(false);
   const [searchQuery, setSearchQuery] = useState('spor dnb');
   const [searchMode, setSearchMode] = useState<'GLOBAL' | 'LOCAL'>('GLOBAL');
@@ -138,6 +254,141 @@ export default function App() {
     }, ...prev].slice(0, 50));
   };
 
+  // Audio playback engine — single shared HTMLAudioElement, one track at a time.
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const blobUrlsRef = useRef<Set<string>>(new Set());
+  const [playback, setPlayback] = useState<{ id: string | null; currentTime: number; duration: number }>({
+    id: null,
+    currentTime: 0,
+    duration: 0,
+  });
+
+  useEffect(() => {
+    const audio = new Audio();
+    audio.preload = 'metadata';
+    audioRef.current = audio;
+
+    const onTime = () => setPlayback(p => ({ ...p, currentTime: audio.currentTime }));
+    const onMeta = () => setPlayback(p => ({ ...p, duration: isFinite(audio.duration) ? audio.duration : 0 }));
+    const onEnd = () => {
+      setPlayback({ id: null, currentTime: 0, duration: 0 });
+      setTracks(prev => prev.map(t => ({ ...t, isPlaying: false })));
+      setLocalTracks(prev => prev.map(t => ({ ...t, isPlaying: false })));
+    };
+    const onErr = () => {
+      addLog('SYSTEM', 'Audio decode error — source may not be a direct audio file.', 'warn');
+      setPlayback({ id: null, currentTime: 0, duration: 0 });
+      setTracks(prev => prev.map(t => ({ ...t, isPlaying: false })));
+      setLocalTracks(prev => prev.map(t => ({ ...t, isPlaying: false })));
+    };
+
+    audio.addEventListener('timeupdate', onTime);
+    audio.addEventListener('loadedmetadata', onMeta);
+    audio.addEventListener('durationchange', onMeta);
+    audio.addEventListener('ended', onEnd);
+    audio.addEventListener('error', onErr);
+
+    return () => {
+      audio.pause();
+      audio.removeEventListener('timeupdate', onTime);
+      audio.removeEventListener('loadedmetadata', onMeta);
+      audio.removeEventListener('durationchange', onMeta);
+      audio.removeEventListener('ended', onEnd);
+      audio.removeEventListener('error', onErr);
+      audio.src = '';
+      blobUrlsRef.current.forEach(u => URL.revokeObjectURL(u));
+      blobUrlsRef.current.clear();
+    };
+  }, []);
+
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    audio.volume = Math.max(0, Math.min(1, mixerValues.volume / 100));
+  }, [mixerValues.volume]);
+
+  const stopAllPlayingFlags = () => {
+    setTracks(prev => prev.map(t => ({ ...t, isPlaying: false })));
+    setLocalTracks(prev => prev.map(t => ({ ...t, isPlaying: false })));
+  };
+
+  const playTrack = (track: TrackData) => {
+    const audio = audioRef.current;
+    if (!audio) return;
+
+    if (!track.audioUrl) {
+      if (track.previewUrl) {
+        addLog(track.agentLabel, `No direct stream for "${track.title}" — opening external preview.`, 'warn');
+        window.open(track.previewUrl, '_blank', 'noopener,noreferrer');
+      } else {
+        addLog('SYSTEM', `"${track.title}" has no audio source. Drop an audio file to play it.`, 'warn');
+      }
+      return;
+    }
+
+    const switchSource = audio.src !== track.audioUrl;
+    if (switchSource) {
+      audio.src = track.audioUrl;
+      setPlayback({ id: track.id, currentTime: 0, duration: 0 });
+    }
+    audio.volume = Math.max(0, Math.min(1, mixerValues.volume / 100));
+
+    audio.play()
+      .then(() => {
+        setPlayback(p => ({ ...p, id: track.id }));
+        setTracks(prev => prev.map(t => ({ ...t, isPlaying: t.id === track.id })));
+        setLocalTracks(prev => prev.map(t => ({ ...t, isPlaying: t.id === track.id })));
+        setUsage(p => ({ ...p, tracksPlayed: p.tracksPlayed + 1 }));
+        addLog(track.agentLabel, `Playing: ${track.title}`, 'success');
+        vibrate([20, 30, 20]);
+      })
+      .catch(err => {
+        addLog('SYSTEM', `Playback failed: ${err?.message ?? 'unknown error'}`, 'warn');
+        stopAllPlayingFlags();
+      });
+  };
+
+  const pausePlayback = (track: TrackData) => {
+    audioRef.current?.pause();
+    setTracks(prev => prev.map(t => t.id === track.id ? { ...t, isPlaying: false } : t));
+    setLocalTracks(prev => prev.map(t => t.id === track.id ? { ...t, isPlaying: false } : t));
+    setPlayback(p => ({ ...p, id: null }));
+    addLog(track.agentLabel, `Paused: ${track.title}`, 'info');
+    vibrate(15);
+  };
+
+  const { state: motionState, enable: enableMotion, disable: disableMotion } = useMotionControls({
+    onCrossfader: (value) =>
+      setMixerValues(prev => ({ ...prev, crossfader: Math.round(value) })),
+    onVolume: (value) =>
+      setMixerValues(prev => ({ ...prev, volume: Math.round(value) })),
+    onTempoDelta: (delta) =>
+      setMixerValues(prev => ({
+        ...prev,
+        tempo: Math.max(60, Math.min(200, Math.round(prev.tempo + delta * 0.6))),
+      })),
+    onShake: () => {
+      audioRef.current?.pause();
+      stopAllPlayingFlags();
+      setPlayback(p => ({ ...p, id: null }));
+      addLog('GYRO', 'Shake detected — emergency stop engaged.', 'warn');
+    },
+    onFlick: (dir) => {
+      addLog('GYRO', `Flick ${dir.toUpperCase()} — cycling layer focus.`, 'info');
+      vibrate(15);
+      if (dir === 'right' || dir === 'up') {
+        const playingIdx = tracks.findIndex(t => t.isPlaying);
+        const nextIdx = tracks.length === 0 ? -1 : playingIdx === -1 ? 0 : (playingIdx + 1) % tracks.length;
+        if (nextIdx >= 0) playTrack(tracks[nextIdx]);
+      } else {
+        audioRef.current?.pause();
+        stopAllPlayingFlags();
+        setPlayback(p => ({ ...p, id: null }));
+      }
+    },
+  });
+
+
   const fetchSuggestions = async (query: string) => {
     setLoadingSuggestions(true);
     setUsage(prev => ({ ...prev, searchesRun: prev.searchesRun + 1 }));
@@ -152,7 +403,19 @@ export default function App() {
       duration: 2200,
     });
     const recs = await getTrackRecommendations(`${query}${searchMode === 'LOCAL' ? ' (local recording style)' : ''}`);
-    setSuggestions(recs);
+    const hydrated = recs.map(rec => {
+      const liked = prefs.liked.find(t => t.id === rec.id);
+      const disliked = prefs.disliked.find(t => t.id === rec.id);
+      const inList = prefs.playlist.some(t => t.id === rec.id);
+      return {
+        ...rec,
+        isLiked: Boolean(liked),
+        isDisliked: Boolean(disliked),
+        feedbackReason: liked?.feedbackReason ?? disliked?.feedbackReason,
+        inPlaylist: inList,
+      };
+    });
+    setSuggestions(hydrated);
     setLoadingSuggestions(false);
     addLog('ANALYST', `Processed ${recs.length} candidates. Pattern matching rank confirmed.`, 'success');
     notify({
@@ -196,7 +459,7 @@ export default function App() {
   }, []);
 
   const togglePlay = (id: string) => {
-    const track = tracks.find(t => t.id === id);
+    const track = tracks.find(t => t.id === id) ?? localTracks.find(t => t.id === id);
     if (!track) return;
     const willPlay = !track.isPlaying;
     addLog(track.agentLabel, `${track.isPlaying ? 'Paused' : 'Playing'} track: ${track.title}`, track.isPlaying ? 'info' : 'success');
@@ -211,7 +474,11 @@ export default function App() {
       sound: willPlay ? 'play' : 'pause',
       duration: 2400,
     });
-    setTracks(prev => prev.map(t => t.id === id ? { ...t, isPlaying: !t.isPlaying } : t));
+    if (track.isPlaying) {
+      pausePlayback(track);
+    } else {
+      playTrack(track);
+    }
   };
 
   const addTrack = (rec: TrackRecommendation, notes?: string) => {
@@ -227,6 +494,8 @@ export default function App() {
       duration: 2400,
     });
 
+    const isDirectAudio = /\.(mp3|wav|ogg|m4a|aac|flac|opus)(\?|#|$)/i.test(rec.previewUrl ?? '');
+
     // Simulate planning state
     setTimeout(() => {
       const newTrack: TrackData = {
@@ -236,15 +505,25 @@ export default function App() {
         agentLabel: rec.agentLabel,
         duration: '03:45',
         isPlaying: false,
-        color: tracks.length % 2 === 0 ? 'cyan' : 'pink'
+        color: tracks.length % 2 === 0 ? 'cyan' : 'pink',
+        audioUrl: isDirectAudio ? rec.previewUrl : undefined,
+        previewUrl: rec.previewUrl,
       };
       setTracks(prev => [...prev, newTrack]);
       setIsDeploying(false);
       if (notes) addLog(rec.agentLabel, `Notes integration: ${notes.slice(0, 50)}...`, 'success');
-      addLog(rec.agentLabel, `Track successfully integrated into the mix.`, 'success');
+      addLog(
+        rec.agentLabel,
+        isDirectAudio
+          ? `Track ready to play in the deck.`
+          : `Added — preview only (no direct audio stream).`,
+        'success'
+      );
       notify({
-        title: 'Track integrated',
-        message: `${rec.title} added to the mix.`,
+        title: isDirectAudio ? 'Track integrated' : 'Preview added',
+        message: isDirectAudio
+          ? `${rec.title} ready to play.`
+          : `${rec.title} — preview only (no direct stream).`,
         type: 'success',
         agent: rec.agentLabel,
       });
@@ -264,17 +543,41 @@ export default function App() {
     });
 
     Array.from(files).forEach(file => {
+      if (!file.type.startsWith('audio/')) {
+        addLog('UPLOADER', `Skipped "${file.name}" — not an audio file.`, 'warn');
+        return;
+      }
+      const url = URL.createObjectURL(file);
+      blobUrlsRef.current.add(url);
+      const id = Math.random().toString(36).substr(2, 9);
       const newLocalTrack: TrackData = {
-        id: Math.random().toString(36).substr(2, 9),
-        title: file.name.replace(/\.[^/.]+$/, ""),
+        id,
+        title: file.name.replace(/\.[^/.]+$/, ''),
         artist: 'User Upload',
         agentLabel: 'UPLOADER',
         duration: '??:??',
         isPlaying: false,
-        color: 'emerald'
+        color: 'emerald',
+        audioUrl: url,
       };
+
+      // Probe duration for nicer display.
+      const probe = new Audio();
+      probe.preload = 'metadata';
+      probe.src = url;
+      probe.addEventListener('loadedmetadata', () => {
+        if (!isFinite(probe.duration)) return;
+        const m = Math.floor(probe.duration / 60);
+        const s = Math.floor(probe.duration % 60).toString().padStart(2, '0');
+        const pretty = `${m.toString().padStart(2, '0')}:${s}`;
+        setLocalTracks(prev => prev.map(t => t.id === id ? { ...t, duration: pretty } : t));
+        setTracks(prev => prev.map(t => t.id === id ? { ...t, duration: pretty } : t));
+      });
+
       setLocalTracks(prev => [newLocalTrack, ...prev]);
-      addLog('UPLOADER', `Track "${file.name}" imported to local library.`, 'success');
+      // Also add to the deck so it's reachable from the mobile UI which has no sidebar.
+      setTracks(prev => [...prev, { ...newLocalTrack, color: prev.length % 2 === 0 ? 'cyan' : 'pink' }]);
+      addLog('UPLOADER', `Imported "${file.name}" — ready to play.`, 'success');
     });
     notify({
       title: 'Library updated',
@@ -349,7 +652,7 @@ export default function App() {
           theme === 'dark' ? 'bg-black border-white/10' : 'bg-white border-slate-200'
         } lg:rounded-[3.5rem] lg:shadow-2xl`}>
           <AIBrain searching={loadingSuggestions} deploying={isDeploying} offline={isOffline} theme={theme} />
-          <AppContent 
+          <AppContent
             theme={theme}
             setTheme={setTheme}
             isVaultOpen={isVaultOpen}
@@ -357,6 +660,7 @@ export default function App() {
             activeTab={activeTab}
             setActiveTab={setActiveTab}
             tracks={tracks}
+            playback={playback}
             suggestions={suggestions}
             loadingSuggestions={loadingSuggestions}
             selectedTrack={selectedTrack}
@@ -395,12 +699,45 @@ export default function App() {
                 duration: 2000,
               });
             }}
+            onSetVerdict={setVerdict}
+            onSendToPlaylist={sendToPlaylist}
+            onOpenPlaylist={() => setIsPlaylistOpen(true)}
+            playlistCount={prefs.playlist.length}
             telemetry={telemetry}
             onOpenDeviceIdentity={() => setIsDeviceIdentityOpen(true)}
+            motionState={motionState}
+            onEnableMotion={enableMotion}
+            onDisableMotion={disableMotion}
             isMobile={true}
           />
         </div>
       </div>
+
+      <PlaylistPanel
+        isOpen={isPlaylistOpen}
+        onClose={() => setIsPlaylistOpen(false)}
+        playlist={prefs.playlist}
+        liked={prefs.liked}
+        disliked={prefs.disliked}
+        onRemoveFromPlaylist={(id) => removePref('playlist', id)}
+        onClearVerdict={(id) => {
+          removePref('liked', id);
+          removePref('disliked', id);
+          setSuggestions(prev =>
+            prev.map(s =>
+              s.id === id
+                ? { ...s, isLiked: false, isDisliked: false, feedbackReason: undefined }
+                : s,
+            ),
+          );
+        }}
+        onUseSeedQuery={(seed) => {
+          if (!seed) return;
+          setSearchQuery(seed);
+          fetchSuggestions(seed);
+        }}
+        theme={theme}
+      />
 
       <AnimatePresence>
         {isVaultOpen && <Vault isOpen={isVaultOpen} onClose={() => setIsVaultOpen(false)} theme={theme} />}
@@ -429,14 +766,15 @@ export default function App() {
 }
 
 // Sub-component for the main app content to avoid repeating logic
-function AppContent({ 
+function AppContent({
   theme,
   setTheme,
   isVaultOpen,
   setIsVaultOpen,
-  activeTab, 
-  setActiveTab, 
-  tracks, 
+  activeTab,
+  setActiveTab,
+  tracks,
+  playback,
   suggestions, 
   loadingSuggestions, 
   selectedTrack, 
@@ -465,8 +803,15 @@ function AppContent({
   onGesture,
   onFileUpload,
   onLike,
+  onSetVerdict,
+  onSendToPlaylist,
+  onOpenPlaylist,
+  playlistCount,
   telemetry,
   onOpenDeviceIdentity,
+  motionState,
+  onEnableMotion,
+  onDisableMotion,
   isMobile = false
 }: any) {
   const { soundEnabled, setSoundEnabled, notificationsEnabled, setNotificationsEnabled, playSound } = useAppFeedback();
@@ -680,6 +1025,18 @@ function AppContent({
             </div>
             <div className="flex items-center gap-3 relative">
               <button
+                onClick={() => onOpenPlaylist?.()}
+                className={`relative p-1.5 rounded-md transition-colors ${theme === 'dark' ? 'text-slate-500 hover:text-jarvis-accent-cyan' : 'text-slate-400 hover:text-slate-600'}`}
+                title="My Playlist & Taste Agent"
+              >
+                <ListMusic className="w-5 h-5" />
+                {playlistCount > 0 && (
+                  <span className="absolute -top-1 -right-1 min-w-[16px] h-[16px] px-1 rounded-full bg-jarvis-accent-pink text-[9px] font-mono font-bold text-white flex items-center justify-center">
+                    {playlistCount}
+                  </span>
+                )}
+              </button>
+              <button
                 onClick={() => {
                   playSound('click');
                   setPrefsOpen(o => !o);
@@ -747,6 +1104,20 @@ function AppContent({
                 }`}
               >
                 <Settings className="w-5 h-5" />
+              </button>
+              <button
+                onClick={() => onOpenPlaylist?.()}
+                className={`relative w-10 h-10 rounded-full flex items-center justify-center border transition-all ${
+                  theme === 'dark' ? 'bg-white/5 border-white/10 text-white' : 'bg-slate-100 border-slate-200 text-slate-600'
+                }`}
+                title="My Playlist & Taste Agent"
+              >
+                <ListMusic className="w-5 h-5" />
+                {playlistCount > 0 && (
+                  <span className="absolute -top-1 -right-1 min-w-[16px] h-[16px] px-1 rounded-full bg-jarvis-accent-pink text-[9px] font-mono font-bold text-white flex items-center justify-center">
+                    {playlistCount}
+                  </span>
+                )}
               </button>
               <button
                 onClick={() => onOpenDeviceIdentity()}
@@ -935,9 +1306,28 @@ function AppContent({
                </h3>
                <div className="flex flex-col gap-1 max-h-32 overflow-y-auto pr-1 custom-scrollbar">
                   {localTracks.map((lt: any) => (
-                    <div key={lt.id} className="p-2 rounded bg-slate-900/50 border border-jarvis-border/20 flex flex-col hover:border-jarvis-accent-cyan/30 cursor-pointer">
-                      <span className="text-[10px] font-bold text-slate-300 truncate">{lt.title}</span>
-                      <span className="text-[8px] font-mono text-slate-500 uppercase">IMPORTED FILE</span>
+                    <div
+                      key={lt.id}
+                      className="p-2 rounded bg-slate-900/50 border border-jarvis-border/20 flex items-center gap-2 hover:border-jarvis-accent-cyan/30"
+                    >
+                      <button
+                        onClick={() => togglePlay(lt.id)}
+                        disabled={!lt.audioUrl}
+                        title={lt.audioUrl ? (lt.isPlaying ? 'Pause' : 'Play') : 'No audio source'}
+                        className={`w-7 h-7 shrink-0 rounded-full flex items-center justify-center border transition-all ${
+                          lt.audioUrl
+                            ? 'bg-jarvis-accent-cyan/20 border-jarvis-accent-cyan/40 text-jarvis-accent-cyan hover:bg-jarvis-accent-cyan/30 active:scale-95'
+                            : 'bg-slate-800 border-slate-700 text-slate-600 cursor-not-allowed'
+                        }`}
+                      >
+                        {lt.isPlaying ? <span className="text-[10px]">❚❚</span> : <span className="text-[10px] ml-0.5">▶</span>}
+                      </button>
+                      <div className="flex flex-col min-w-0 flex-1">
+                        <span className="text-[10px] font-bold text-slate-300 truncate">{lt.title}</span>
+                        <span className="text-[8px] font-mono text-slate-500 uppercase">
+                          {lt.audioUrl ? lt.duration : 'IMPORTED FILE'}
+                        </span>
+                      </div>
                     </div>
                   ))}
                   <label className="py-2 border border-dashed border-jarvis-border/50 rounded text-[9px] font-mono text-slate-600 hover:text-slate-400 hover:border-jarvis-border transition-all mt-1 cursor-pointer text-center block">
@@ -1024,6 +1414,15 @@ function AppContent({
                   </div>
                </div>
 
+               <div className="px-6">
+                  <MotionControls
+                    state={motionState}
+                    onEnable={onEnableMotion}
+                    onDisable={onDisableMotion}
+                    onTestPulse={() => vibrate([10, 30, 60, 30, 10])}
+                  />
+               </div>
+
                <div className="px-6 flex flex-col gap-4">
                   <h3 className="text-xs font-mono font-black text-white/40 tracking-widest uppercase">Deck Status</h3>
                   <div className="grid grid-cols-2 gap-4">
@@ -1097,6 +1496,13 @@ function AppContent({
                 </div>
                 
                 <ControlDeck />
+
+                <MotionControls
+                  state={motionState}
+                  onEnable={onEnableMotion}
+                  onDisable={onDisableMotion}
+                  onTestPulse={() => vibrate([10, 30, 60, 30, 10])}
+                />
              </div>
           </div>
 
@@ -1108,12 +1514,14 @@ function AppContent({
                    </button>
                 </div>
                 <div className="flex flex-col gap-2">
-                   {tracks.map(track => (
-                     <TrackLayer 
-                       key={track.id} 
-                       title={track.id === '1' ? 'Layer A' : 'Layer B'} 
+                   {tracks.map((track, i) => (
+                     <TrackLayer
+                       key={track.id}
+                       title={`Layer ${String.fromCharCode(65 + i)}`}
                        track={track}
                        onPlayToggle={() => togglePlay(track.id)}
+                       currentTime={playback.id === track.id ? playback.currentTime : 0}
+                       totalSeconds={playback.id === track.id ? playback.duration : 0}
                      />
                    ))}
                 </div>
@@ -1188,17 +1596,39 @@ function AppContent({
                                onClick={(e) => {
                                  e.stopPropagation();
                                  if (!rec.isLiked) onLike(rec);
-                                 setSuggestions(prev => prev.map(s => s.id === rec.id ? { ...s, isLiked: !s.isLiked } : s));
+                                 onSetVerdict(rec, rec.isLiked ? 'clear' : 'like');
                                }}
-                               className={`w-7 h-7 rounded-full flex items-center justify-center transition-all shadow-lg ${rec.isLiked ? 'bg-red-500 text-white' : 'bg-slate-800 text-white hover:bg-red-500/20'}`}
+                               title={rec.isLiked ? 'Clear like' : 'Like (teach the agent why)'}
+                               className={`w-7 h-7 rounded-full flex items-center justify-center transition-all shadow-lg ${rec.isLiked ? 'bg-emerald-500 text-white' : 'bg-slate-800 text-white hover:bg-emerald-500/20'}`}
                              >
                                <Heart className={`w-3.5 h-3.5 ${rec.isLiked ? 'fill-current' : ''}`} />
                              </button>
-                             <button 
+                             <button
+                               onClick={(e) => {
+                                 e.stopPropagation();
+                                 onSetVerdict(rec, rec.isDisliked ? 'clear' : 'dislike');
+                               }}
+                               title={rec.isDisliked ? 'Clear dislike' : 'Dislike (teach the agent why)'}
+                               className={`w-7 h-7 rounded-full flex items-center justify-center transition-all shadow-lg ${rec.isDisliked ? 'bg-rose-500 text-white' : 'bg-slate-800 text-white hover:bg-rose-500/20'}`}
+                             >
+                               <ThumbsDown className={`w-3.5 h-3.5 ${rec.isDisliked ? 'fill-current' : ''}`} />
+                             </button>
+                             <button
+                               onClick={(e) => {
+                                 e.stopPropagation();
+                                 onSendToPlaylist(rec);
+                               }}
+                               title={rec.inPlaylist ? 'In playlist' : 'Send to playlist'}
+                               className={`w-7 h-7 rounded-full flex items-center justify-center transition-all shadow-lg ${rec.inPlaylist ? 'bg-jarvis-accent-pink text-white' : 'bg-slate-800 text-white hover:bg-jarvis-accent-pink/20'}`}
+                             >
+                               <ListMusic className="w-3.5 h-3.5" />
+                             </button>
+                             <button
                                onClick={(e) => {
                                  e.stopPropagation();
                                  addTrack(rec);
                                }}
+                               title="Add to mix"
                                className="w-7 h-7 rounded-full bg-jarvis-accent-cyan flex items-center justify-center text-jarvis-bg hover:scale-110 active:scale-95 transition-all shadow-lg"
                              >
                                <Plus className="w-4 h-4 stroke-[3]" />
