@@ -1,18 +1,25 @@
 import { GoogleGenAI } from "@google/genai";
 import { getAgentImage } from "../constants/agentImages";
+import { getApiKey, markKeyUsed } from "./apiKeyManager";
+import { recordUsage } from "./usageTracker";
 
 let aiInstance: GoogleGenAI | null = null;
+let aiInstanceKey: string | null = null;
 
 function getAI() {
-  if (!aiInstance) {
-    const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) {
-      throw new Error("GEMINI_API_KEY is not set. Please provide it in the environment.");
-    }
-    aiInstance = new GoogleGenAI({ apiKey });
+  const apiKey = getApiKey('gemini');
+  if (!apiKey) {
+    throw new Error("GEMINI_API_KEY is not set. Add it via the Neural Vault or your environment.");
   }
+  if (!aiInstance || aiInstanceKey !== apiKey) {
+    aiInstance = new GoogleGenAI({ apiKey });
+    aiInstanceKey = apiKey;
+  }
+  markKeyUsed('gemini');
   return aiInstance;
 }
+
+const estimateTokens = (text: string) => Math.ceil((text || '').length / 4);
 
 // Image-gen models don't accept the googleSearch tool, so we run a short
 // search-grounded text pass first to gather real visual cues, then feed
@@ -20,12 +27,21 @@ function getAI() {
 const enrichWithWebContext = async (subject: string, hint: string): Promise<string> => {
   try {
     const ai = getAI();
+    const prompt = `Search the web for visual references for: ${subject}. Context: ${hint}. Reply with a single short comma-separated list (max 20 words) of concrete visual descriptors only — no sentences, no preamble.`;
     const res = await ai.models.generateContent({
       model: "gemini-3-flash-preview",
-      contents: `Search the web for visual references for: ${subject}. Context: ${hint}. Reply with a single short comma-separated list (max 20 words) of concrete visual descriptors only — no sentences, no preamble.`,
+      contents: prompt,
       config: { tools: [{ googleSearch: {} }] },
     });
-    return (res.text ?? "").replace(/\n+/g, " ").trim();
+    const out = (res.text ?? "").replace(/\n+/g, " ").trim();
+    recordUsage({
+      provider: 'gemini',
+      model: 'gemini-3-flash-preview',
+      feature: 'visual-context',
+      inputTokens: estimateTokens(prompt),
+      outputTokens: estimateTokens(out),
+    });
+    return out;
   } catch {
     return "";
   }
@@ -63,6 +79,15 @@ export const generateTrackArtwork = async (title: string, artist: string, genre:
       },
     });
 
+    recordUsage({
+      provider: 'gemini',
+      model: 'gemini-2.5-flash-image',
+      feature: 'track-artwork',
+      inputTokens: estimateTokens(prompt),
+      outputTokens: 0,
+      imageCalls: 1,
+    });
+
     for (const part of response.candidates?.[0]?.content?.parts || []) {
       if (part.inlineData) {
         return `data:image/png;base64,${part.inlineData.data}`;
@@ -92,6 +117,15 @@ export const generateAgentAvatar = async (agentName: string, role: string): Prom
       config: {
         imageConfig: { aspectRatio: "1:1" }
       },
+    });
+
+    recordUsage({
+      provider: 'gemini',
+      model: 'gemini-2.5-flash-image',
+      feature: 'agent-avatar',
+      inputTokens: estimateTokens(prompt),
+      outputTokens: 0,
+      imageCalls: 1,
     });
 
     for (const part of response.candidates?.[0]?.content?.parts || []) {
