@@ -10,10 +10,10 @@
  * `runDjSkill` style fetches but with the smallest possible body.
  */
 
-import Anthropic from '@anthropic-ai/sdk';
 import { GoogleGenAI } from '@google/genai';
 import type { ProviderId } from './apiKeyManager';
 import { getApiKey, hasApiKey, markKeyUsed, PROVIDERS } from './apiKeyManager';
+import { getAnthropicClient } from './anthropicClient';
 import { getPreferredModel } from './modelCatalog';
 import { recordUsage } from './usageTracker';
 
@@ -71,16 +71,13 @@ const truncate = (text: string, max = 80): string =>
 // ─── Per-provider ping implementations ─────────────────────────────────────
 
 const pingAnthropic = async (model: string): Promise<string> => {
-  const apiKey = getApiKey('anthropic');
-  if (!apiKey) throw new Error('No Anthropic key configured.');
-  const client = new Anthropic({ apiKey, dangerouslyAllowBrowser: true });
+  const client = getAnthropicClient();
   const response = await client.messages.create({
     model,
     max_tokens: 16,
     system: 'You are a health-check responder. Reply with one word.',
     messages: [{ role: 'user', content: PING_PROMPT }],
   });
-  markKeyUsed('anthropic');
   recordUsage({
     provider: 'anthropic',
     model,
