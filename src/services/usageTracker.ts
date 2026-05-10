@@ -38,6 +38,15 @@ export const MODEL_PRICING: Record<string, ModelPricing> = {
   'gpt-4o': { provider: 'openai', model: 'gpt-4o', inputPerMTok: 2.5, outputPerMTok: 10 },
   'gpt-4o-mini': { provider: 'openai', model: 'gpt-4o-mini', inputPerMTok: 0.15, outputPerMTok: 0.6 },
   'whisper-1': { provider: 'openai', model: 'whisper-1', inputPerMTok: 0, outputPerMTok: 0 },
+
+  // NVIDIA NIM (OpenAI-compatible) — public credit-based pricing varies by model.
+  // Numbers below are conservative placeholders so cost reporting stays in the
+  // right ballpark; revisit when NVIDIA publishes per-model USD/MTok rates.
+  'meta/llama-3.1-70b-instruct': { provider: 'nvidia', model: 'meta/llama-3.1-70b-instruct', inputPerMTok: 0.6, outputPerMTok: 0.6 },
+  'meta/llama-3.1-405b-instruct': { provider: 'nvidia', model: 'meta/llama-3.1-405b-instruct', inputPerMTok: 3, outputPerMTok: 3 },
+  'meta/llama-3.1-8b-instruct': { provider: 'nvidia', model: 'meta/llama-3.1-8b-instruct', inputPerMTok: 0.2, outputPerMTok: 0.2 },
+  'nvidia/nemotron-4-340b-instruct': { provider: 'nvidia', model: 'nvidia/nemotron-4-340b-instruct', inputPerMTok: 2.5, outputPerMTok: 2.5 },
+  'mistralai/mixtral-8x22b-instruct-v0.1': { provider: 'nvidia', model: 'mistralai/mixtral-8x22b-instruct-v0.1', inputPerMTok: 1.2, outputPerMTok: 1.2 },
 };
 
 export const lookupPricing = (provider: ProviderId, model: string): ModelPricing => {
@@ -182,6 +191,7 @@ export const getUsage = (): UsageSummary => {
       anthropic: emptyTotals('anthropic'),
       kimi: emptyTotals('kimi'),
       openai: emptyTotals('openai'),
+      nvidia: emptyTotals('nvidia'),
     },
   };
 

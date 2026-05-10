@@ -627,7 +627,7 @@ const ImportPanel = ({ theme }: { theme: 'dark' | 'light' }) => {
         />
         <div className="flex items-center justify-between mt-3">
           <span className="text-[9px] font-mono text-slate-500 uppercase tracking-widest">
-            Recognised: GEMINI_API_KEY · ANTHROPIC_API_KEY · KIMI_API_KEY · OPENAI_API_KEY
+            Recognised: GEMINI_API_KEY · ANTHROPIC_API_KEY · KIMI_API_KEY · OPENAI_API_KEY · NVIDIA_API_KEY
           </span>
           <button
             onClick={onImport}

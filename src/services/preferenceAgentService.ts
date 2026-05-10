@@ -1,18 +1,23 @@
 import Anthropic from '@anthropic-ai/sdk';
 import type { TrackRecommendation } from './musicService';
+import { getApiKey, markKeyUsed } from './apiKeyManager';
+import { recordUsage } from './usageTracker';
 
 let clientInstance: Anthropic | null = null;
+let clientInstanceKey: string | null = null;
 
 const getClient = (): Anthropic => {
-  if (!clientInstance) {
-    const apiKey = process.env.ANTHROPIC_API_KEY;
-    if (!apiKey) {
-      throw new Error(
-        'ANTHROPIC_API_KEY is not set. Add it to your environment to enable the preference agent.',
-      );
-    }
-    clientInstance = new Anthropic({ apiKey, dangerouslyAllowBrowser: true });
+  const apiKey = getApiKey('anthropic');
+  if (!apiKey) {
+    throw new Error(
+      'ANTHROPIC_API_KEY is not set. Add it via the Neural Vault or your environment.',
+    );
   }
+  if (!clientInstance || clientInstanceKey !== apiKey) {
+    clientInstance = new Anthropic({ apiKey, dangerouslyAllowBrowser: true });
+    clientInstanceKey = apiKey;
+  }
+  markKeyUsed('anthropic');
   return clientInstance;
 };
 
@@ -78,6 +83,14 @@ export const analyzePreferences = async (
     max_tokens: 1024,
     system: SYSTEM_PROMPT,
     messages: [{ role: 'user', content: buildUserPayload(feedback) }],
+  });
+
+  recordUsage({
+    provider: 'anthropic',
+    model,
+    feature: 'claude:preference-agent',
+    inputTokens: response.usage?.input_tokens ?? 0,
+    outputTokens: response.usage?.output_tokens ?? 0,
   });
 
   const textBlock = response.content.find((b) => b.type === 'text');
