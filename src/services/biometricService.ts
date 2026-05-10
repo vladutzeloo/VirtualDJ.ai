@@ -81,7 +81,16 @@ export const registerBiometric = async (username = 'vdj-operator') => {
 
 export const authenticateBiometric = async () => {
   const stored = localStorage.getItem(CRED_STORAGE_KEY);
-  const allow = stored ? [JSON.parse(stored).id] : [];
+  let allow: string[] = [];
+  if (stored) {
+    try {
+      const parsed = JSON.parse(stored);
+      if (parsed?.id) allow = [parsed.id];
+    } catch (err) {
+      console.error('Failed to parse stored biometric credential; resetting.', err);
+      resetVaultCredential();
+    }
+  }
 
   const options: PublicKeyCredentialRequestOptionsJSON = {
     rpId: RP_ID,

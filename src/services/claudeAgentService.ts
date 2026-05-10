@@ -72,7 +72,12 @@ export const runDjSkill = async <T = unknown>({
   const textBlock = response.content.find((b) => b.type === 'text');
   const raw = textBlock && 'text' in textBlock ? textBlock.text.trim() : '';
   const cleaned = raw.replace(/^```(?:json)?\s*|\s*```$/g, '');
-  return JSON.parse(cleaned) as T;
+  try {
+    return JSON.parse(cleaned) as T;
+  } catch (err) {
+    console.error('Claude DJ skill parse error. Raw response:', raw, err);
+    throw new Error('The Claude DJ agent returned an invalid response format.');
+  }
 };
 
 export const isClaudeConfigured = (): boolean => {
