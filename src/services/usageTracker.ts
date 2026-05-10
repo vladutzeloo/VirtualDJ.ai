@@ -25,11 +25,6 @@ export const MODEL_PRICING: Record<string, ModelPricing> = {
   'gemini-2.5-flash': { provider: 'gemini', model: 'gemini-2.5-flash', inputPerMTok: 0.3, outputPerMTok: 2.5 },
   'gemini-2.5-pro': { provider: 'gemini', model: 'gemini-2.5-pro', inputPerMTok: 1.25, outputPerMTok: 10 },
 
-  // Anthropic Claude
-  'claude-opus-4-7': { provider: 'anthropic', model: 'claude-opus-4-7', inputPerMTok: 15, outputPerMTok: 75 },
-  'claude-sonnet-4-6': { provider: 'anthropic', model: 'claude-sonnet-4-6', inputPerMTok: 3, outputPerMTok: 15 },
-  'claude-haiku-4-5': { provider: 'anthropic', model: 'claude-haiku-4-5', inputPerMTok: 1, outputPerMTok: 5 },
-
   // Moonshot Kimi
   'moonshot-v1-128k': { provider: 'kimi', model: 'moonshot-v1-128k', inputPerMTok: 2, outputPerMTok: 5 },
   'moonshot-v1-32k': { provider: 'kimi', model: 'moonshot-v1-32k', inputPerMTok: 1.2, outputPerMTok: 3 },
@@ -47,6 +42,11 @@ export const MODEL_PRICING: Record<string, ModelPricing> = {
   'meta/llama-3.1-8b-instruct': { provider: 'nvidia', model: 'meta/llama-3.1-8b-instruct', inputPerMTok: 0.2, outputPerMTok: 0.2 },
   'nvidia/nemotron-4-340b-instruct': { provider: 'nvidia', model: 'nvidia/nemotron-4-340b-instruct', inputPerMTok: 2.5, outputPerMTok: 2.5 },
   'mistralai/mixtral-8x22b-instruct-v0.1': { provider: 'nvidia', model: 'mistralai/mixtral-8x22b-instruct-v0.1', inputPerMTok: 1.2, outputPerMTok: 1.2 },
+
+  // Local LLM (Ollama / LM Studio / llama.cpp / vLLM) — inference runs on the
+  // user's hardware, so monetary cost is zero. We still record the events so
+  // the Vault can show call counts and token throughput.
+  'local-default': { provider: 'local', model: 'local-default', inputPerMTok: 0, outputPerMTok: 0 },
 };
 
 export const lookupPricing = (provider: ProviderId, model: string): ModelPricing => {
@@ -188,10 +188,10 @@ export const getUsage = (): UsageSummary => {
     totalImageCalls: 0,
     byProvider: {
       gemini: emptyTotals('gemini'),
-      anthropic: emptyTotals('anthropic'),
       kimi: emptyTotals('kimi'),
       openai: emptyTotals('openai'),
       nvidia: emptyTotals('nvidia'),
+      local: emptyTotals('local'),
     },
   };
 

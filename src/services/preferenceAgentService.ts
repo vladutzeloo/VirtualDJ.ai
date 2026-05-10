@@ -1,7 +1,5 @@
 import type { TrackRecommendation } from './musicService';
-import { recordUsage } from './usageTracker';
-import { getAnthropicClient } from './anthropicClient';
-import { extractJsonObject } from '../utils/jsonExtract';
+import { runAiJson } from './aiProviderChain';
 
 export interface FeedbackEntry {
   id: string;
@@ -46,7 +44,6 @@ const buildUserPayload = (entries: FeedbackEntry[]): string => {
 
 export const analyzePreferences = async (
   feedback: FeedbackEntry[],
-  model = 'claude-sonnet-4-6',
   agentBriefing?: string,
 ): Promise<TasteProfile> => {
   if (feedback.length === 0) {
@@ -60,48 +57,35 @@ export const analyzePreferences = async (
     };
   }
 
-  const client = getAnthropicClient();
   const system = agentBriefing
     ? `${SYSTEM_PROMPT}\n\nThe user has also rated the AI agent personas themselves. Weight TRUSTED personas' previous picks more heavily and discount AVOID personas when summarising taste.\n\n${agentBriefing}`
     : SYSTEM_PROMPT;
-  const response = await client.messages.create({
-    model,
-    max_tokens: 1024,
-    system,
-    messages: [{ role: 'user', content: buildUserPayload(feedback) }],
+
+  const { data: parsed } = await runAiJson<Partial<TasteProfile>>({
+    feature: 'preference-agent',
+    maxTokens: 1024,
+    messages: [
+      { role: 'system', content: system },
+      { role: 'user', content: buildUserPayload(feedback) },
+    ],
   });
 
-  recordUsage({
-    provider: 'anthropic',
-    model,
-    feature: 'claude:preference-agent',
-    inputTokens: response.usage?.input_tokens ?? 0,
-    outputTokens: response.usage?.output_tokens ?? 0,
-  });
-
-  const textBlock = response.content.find((b) => b.type === 'text');
-  const raw = textBlock && 'text' in textBlock ? textBlock.text.trim() : '';
-
-  try {
-    const parsed = extractJsonObject(raw) as TasteProfile;
-    return {
-      summary: String(parsed.summary ?? ''),
-      loved_traits: Array.isArray(parsed.loved_traits) ? parsed.loved_traits.map(String) : [],
-      rejected_traits: Array.isArray(parsed.rejected_traits) ? parsed.rejected_traits.map(String) : [],
-      next_move: String(parsed.next_move ?? ''),
-      search_seed: String(parsed.search_seed ?? ''),
-      per_track: Array.isArray(parsed.per_track)
-        ? parsed.per_track.map((t: any) => ({
-            id: String(t.id ?? ''),
-            verdict: t.verdict === 'disliked' ? 'disliked' : 'liked',
-            why: String(t.why ?? ''),
-          }))
-        : [],
-    };
-  } catch (err) {
-    console.error('Preference agent parse error. Raw response:', raw, err);
-    throw new Error('The preference agent returned an invalid response.');
-  }
+  return {
+    summary: String(parsed.summary ?? ''),
+    loved_traits: Array.isArray(parsed.loved_traits) ? parsed.loved_traits.map(String) : [],
+    rejected_traits: Array.isArray(parsed.rejected_traits)
+      ? parsed.rejected_traits.map(String)
+      : [],
+    next_move: String(parsed.next_move ?? ''),
+    search_seed: String(parsed.search_seed ?? ''),
+    per_track: Array.isArray(parsed.per_track)
+      ? parsed.per_track.map((t: any) => ({
+          id: String(t.id ?? ''),
+          verdict: t.verdict === 'disliked' ? 'disliked' : 'liked',
+          why: String(t.why ?? ''),
+        }))
+      : [],
+  };
 };
 
 export const tracksToFeedback = (tracks: TrackRecommendation[]): FeedbackEntry[] =>

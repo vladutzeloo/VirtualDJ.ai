@@ -1,7 +1,13 @@
-import { hasApiKey } from './apiKeyManager';
-import { recordUsage } from './usageTracker';
-import { getAnthropicClient } from './anthropicClient';
-import { extractJsonObject } from '../utils/jsonExtract';
+/**
+ * DJ Skill Service
+ *
+ * Persona-based DJ assistants that run on whichever AI provider is
+ * available (NVIDIA → Kimi → local LLM, see aiProviderChain). Each skill
+ * owns its system prompt and expected JSON shape; the chain handles
+ * routing and fallback.
+ */
+
+import { runAiJson, isAiChainConfigured, type AiProviderId } from './aiProviderChain';
 
 export interface DjSkill {
   name: string;
@@ -36,48 +42,40 @@ recommend the next 8-bar move. Reply ONLY with JSON: { "action": string, "eq": {
 export interface SkillRunOptions {
   skillId: keyof typeof DJ_SKILLS;
   userPrompt: string;
-  model?: string;
   maxTokens?: number;
   agentBriefing?: string;
+  prefer?: AiProviderId;
+}
+
+export interface SkillRunResult<T> {
+  data: T;
+  provider: AiProviderId;
+  model: string;
 }
 
 export const runDjSkill = async <T = unknown>({
   skillId,
   userPrompt,
-  model = 'claude-sonnet-4-6',
   maxTokens = 1024,
   agentBriefing,
-}: SkillRunOptions): Promise<T> => {
+  prefer,
+}: SkillRunOptions): Promise<SkillRunResult<T>> => {
   const skill = DJ_SKILLS[skillId];
   if (!skill) throw new Error(`Unknown DJ skill: ${skillId}`);
 
-  const client = getAnthropicClient();
   const system = agentBriefing
     ? `${skill.systemPrompt}\n\nThe user has rated other AI agent personas. Lean toward TRUSTED personas' style, avoid the AVOID personas' patterns:\n\n${agentBriefing}`
     : skill.systemPrompt;
-  const response = await client.messages.create({
-    model,
-    max_tokens: maxTokens,
-    system,
-    messages: [{ role: 'user', content: userPrompt }],
-  });
 
-  recordUsage({
-    provider: 'anthropic',
-    model,
-    feature: `claude:${String(skillId)}`,
-    inputTokens: response.usage?.input_tokens ?? 0,
-    outputTokens: response.usage?.output_tokens ?? 0,
+  return runAiJson<T>({
+    feature: `dj-skill:${String(skillId)}`,
+    maxTokens,
+    prefer,
+    messages: [
+      { role: 'system', content: system },
+      { role: 'user', content: userPrompt },
+    ],
   });
-
-  const textBlock = response.content.find((b) => b.type === 'text');
-  const raw = textBlock && 'text' in textBlock ? textBlock.text.trim() : '';
-  try {
-    return extractJsonObject(raw) as T;
-  } catch (err) {
-    console.error('Claude DJ skill parse error. Raw response:', raw, err);
-    throw new Error('The Claude DJ agent returned an invalid response format.');
-  }
 };
 
-export const isClaudeConfigured = (): boolean => hasApiKey('anthropic');
+export const isDjSkillConfigured = (): boolean => isAiChainConfigured();

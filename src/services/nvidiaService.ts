@@ -6,9 +6,8 @@
  * Mixtral, Qwen and others — see https://build.nvidia.com.
  *
  * The browser calls the endpoint directly with the user's nvapi-* key.
- * As with the Anthropic browser-side client, this is gated behind the
- * Neural Vault and treated as user-authorized — never store a server-only
- * NVIDIA key in here.
+ * The key is gated behind the WebAuthn-protected Neural Vault and treated
+ * as user-authorized — never store a server-only NVIDIA key in here.
  */
 
 import { getApiKey, hasApiKey, markKeyUsed } from './apiKeyManager';

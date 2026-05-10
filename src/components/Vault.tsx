@@ -46,6 +46,13 @@ import {
   clearAllKeys,
 } from '../services/apiKeyManager';
 import {
+  getLocalLlmConfig,
+  setLocalLlmConfig,
+  subscribeLocalLlm,
+  DEFAULT_LOCAL_LLM_CONFIG,
+  type LocalLlmConfig,
+} from '../services/localLlmService';
+import {
   getUsage,
   subscribeUsage,
   clearUsage,
@@ -429,11 +436,116 @@ const Tabs = ({ theme, tab, setTab }: { theme: 'dark' | 'light'; tab: Tab; setTa
 
 const KeysPanel = ({ theme, keys }: { theme: 'dark' | 'light'; keys: KeyPreview[] }) => (
   <div className="space-y-3">
+    <LocalLlmCard theme={theme} />
     {keys.map(k => (
       <KeyCard key={k.provider} preview={k} theme={theme} />
     ))}
   </div>
 );
+
+// ─── Local LLM endpoint card ──────────────────────────────────────────────
+
+const LocalLlmCard = ({ theme }: { theme: 'dark' | 'light' }) => {
+  const [config, setConfig] = useState<LocalLlmConfig>(() => getLocalLlmConfig());
+  const [draftBaseUrl, setDraftBaseUrl] = useState(config.baseUrl);
+  const [draftModel, setDraftModel] = useState(config.model);
+  const [savedFlash, setSavedFlash] = useState(false);
+
+  useEffect(() => {
+    return subscribeLocalLlm(() => {
+      const next = getLocalLlmConfig();
+      setConfig(next);
+      setDraftBaseUrl(next.baseUrl);
+      setDraftModel(next.model);
+    });
+  }, []);
+
+  const dirty = draftBaseUrl !== config.baseUrl || draftModel !== config.model;
+  const isDefault =
+    config.baseUrl === DEFAULT_LOCAL_LLM_CONFIG.baseUrl &&
+    config.model === DEFAULT_LOCAL_LLM_CONFIG.model;
+
+  const onSave = () => {
+    setLocalLlmConfig({ baseUrl: draftBaseUrl, model: draftModel });
+    setSavedFlash(true);
+    setTimeout(() => setSavedFlash(false), 1500);
+  };
+
+  return (
+    <div className={`rounded-2xl border p-4 transition-all ${
+      theme === 'dark' ? 'bg-white/[0.03] border-white/10' : 'bg-slate-50 border-slate-200'
+    }`}>
+      <div className="flex items-start justify-between gap-3 mb-3">
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className={`text-sm font-display font-black tracking-tight ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>
+              Local LLM Endpoint
+            </span>
+            <span className={`text-[8px] font-mono font-black uppercase tracking-widest px-2 py-0.5 rounded-full border ${
+              isDefault
+                ? 'text-slate-500 border-white/10 bg-white/5'
+                : 'text-emerald-400 border-emerald-500/30 bg-emerald-500/10'
+            }`}>
+              {isDefault ? 'Default' : 'Custom'}
+            </span>
+            {savedFlash && (
+              <span className="text-[8px] font-mono font-black uppercase tracking-widest text-emerald-400 flex items-center gap-1">
+                <CheckCircle2 className="w-3 h-3" /> Saved
+              </span>
+            )}
+          </div>
+          <p className="text-[10px] font-mono text-slate-500 mt-0.5">
+            Fallback chain target. Any OpenAI-compatible server: Ollama, LM Studio, llama.cpp, vLLM.
+          </p>
+        </div>
+      </div>
+
+      <div className="space-y-2">
+        <label className="block">
+          <span className="text-[9px] font-mono uppercase tracking-widest text-slate-500">Base URL</span>
+          <input
+            type="text"
+            value={draftBaseUrl}
+            onChange={e => setDraftBaseUrl(e.target.value)}
+            placeholder={DEFAULT_LOCAL_LLM_CONFIG.baseUrl}
+            className={`mt-1 w-full h-10 px-3 rounded-lg border bg-transparent font-mono text-xs focus:outline-none focus:ring-2 ${
+              theme === 'dark'
+                ? 'border-white/10 text-white focus:ring-jarvis-accent-cyan/40'
+                : 'border-slate-200 text-slate-900 focus:ring-jarvis-accent-cyan/30'
+            }`}
+          />
+        </label>
+        <label className="block">
+          <span className="text-[9px] font-mono uppercase tracking-widest text-slate-500">Model</span>
+          <input
+            type="text"
+            value={draftModel}
+            onChange={e => setDraftModel(e.target.value)}
+            placeholder={DEFAULT_LOCAL_LLM_CONFIG.model}
+            className={`mt-1 w-full h-10 px-3 rounded-lg border bg-transparent font-mono text-xs focus:outline-none focus:ring-2 ${
+              theme === 'dark'
+                ? 'border-white/10 text-white focus:ring-jarvis-accent-cyan/40'
+                : 'border-slate-200 text-slate-900 focus:ring-jarvis-accent-cyan/30'
+            }`}
+          />
+        </label>
+        <div className="flex items-center justify-between gap-2 pt-1">
+          <span className="text-[9px] font-mono text-slate-600">
+            Ollama 11434 · LM Studio 1234 · llama.cpp 8080 · vLLM 8000
+          </span>
+          <button
+            onClick={onSave}
+            disabled={!dirty || !draftBaseUrl.trim() || !draftModel.trim()}
+            className="h-9 px-4 rounded-lg bg-jarvis-accent-cyan text-jarvis-bg font-mono font-black text-[10px] uppercase tracking-widest disabled:opacity-30 active:scale-95 transition flex items-center gap-1.5"
+          >
+            <Save className="w-3.5 h-3.5" />
+            Save
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
 
 const KeyCard = ({ preview, theme }: { preview: KeyPreview; theme: 'dark' | 'light' }) => {
   const [editing, setEditing] = useState(false);
@@ -650,7 +762,7 @@ const ImportPanel = ({ theme }: { theme: 'dark' | 'light' }) => {
         <textarea
           value={blob}
           onChange={e => setBlob(e.target.value)}
-          placeholder={`# Paste a .env-style block, e.g.\nGEMINI_API_KEY=AIza...\nANTHROPIC_API_KEY="sk-ant-..."`}
+          placeholder={`# Paste a .env-style block, e.g.\nGEMINI_API_KEY=AIza...\nNVIDIA_API_KEY="nvapi-..."`}
           rows={6}
           className={`w-full rounded-lg border bg-transparent font-mono text-[11px] p-3 focus:outline-none focus:ring-2 ${
             theme === 'dark'
@@ -660,7 +772,7 @@ const ImportPanel = ({ theme }: { theme: 'dark' | 'light' }) => {
         />
         <div className="flex items-center justify-between mt-3">
           <span className="text-[9px] font-mono text-slate-500 uppercase tracking-widest">
-            Recognised: GEMINI_API_KEY · ANTHROPIC_API_KEY · KIMI_API_KEY · OPENAI_API_KEY · NVIDIA_API_KEY
+            Recognised: GEMINI_API_KEY · KIMI_API_KEY · OPENAI_API_KEY · NVIDIA_API_KEY
           </span>
           <button
             onClick={onImport}

@@ -72,7 +72,7 @@ export const PlaylistPanel = ({
     let cancelled = false;
     setLoading(true);
     setError(null);
-    analyzePreferences(feedback, undefined, agentBriefing)
+    analyzePreferences(feedback, agentBriefing)
       .then((p) => {
         if (!cancelled) setProfile(p);
       })
@@ -149,7 +149,7 @@ export const PlaylistPanel = ({
                   <h3 className={`text-[10px] font-display font-bold uppercase tracking-[0.2em] ${
                     isDark ? 'text-white' : 'text-slate-700'
                   }`}>
-                    Taste Agent · powered by Claude
+                    Taste Agent · NVIDIA → Kimi → Local
                   </h3>
                 </div>
 
