@@ -33,7 +33,7 @@ import {
 import { StatItem } from './components/StatItem';
 import { MixerKnob } from './components/MixerKnob';
 import { TrackLayer, TrackData } from './components/TrackLayer';
-import { getTrackRecommendations, TrackRecommendation } from './services/musicService';
+import { searchPlayableTracks, TrackRecommendation } from './services/musicService';
 import { PlaylistPanel } from './components/PlaylistPanel';
 import { generateTrackArtwork, generateAgentAvatar } from './services/imageService';
 import { JulesAgent } from './components/JulesAgent';
@@ -402,7 +402,7 @@ export default function App() {
       sound: 'scan',
       duration: 2200,
     });
-    const recs = await getTrackRecommendations(`${query}${searchMode === 'LOCAL' ? ' (local recording style)' : ''}`);
+    const recs = await searchPlayableTracks(`${query}${searchMode === 'LOCAL' ? ' (local recording style)' : ''}`);
     const hydrated = recs.map(rec => {
       const liked = prefs.liked.find(t => t.id === rec.id);
       const disliked = prefs.disliked.find(t => t.id === rec.id);
@@ -425,11 +425,14 @@ export default function App() {
       agent: 'ANALYST',
     });
 
-    // Background image generation using Gemini 3.1 Flash Image (Banana 2)
+    // Background image generation using Gemini 3.1 Flash Image (Banana 2).
+    // Skip when the source (e.g. Audius) already provided artwork.
     recs.forEach(async (rec, index) => {
-      const imageUrl = await generateTrackArtwork(rec.title, rec.artist, rec.genre);
-      if (imageUrl) {
-        setSuggestions(prev => prev.map((s, i) => i === index ? { ...s, imageUrl } : s));
+      if (!rec.imageUrl) {
+        const imageUrl = await generateTrackArtwork(rec.title, rec.artist, rec.genre);
+        if (imageUrl) {
+          setSuggestions(prev => prev.map((s, i) => i === index ? { ...s, imageUrl } : s));
+        }
       }
 
       // Pre-generate agent avatars if not already present
@@ -495,6 +498,9 @@ export default function App() {
     });
 
     const isDirectAudio = /\.(mp3|wav|ogg|m4a|aac|flac|opus)(\?|#|$)/i.test(rec.previewUrl ?? '');
+    // Prefer an explicit stream URL (e.g. from Audius) over a guessed extension.
+    const playableUrl = rec.streamUrl ?? (isDirectAudio ? rec.previewUrl : undefined);
+    const playable = Boolean(playableUrl);
 
     // Simulate planning state
     setTimeout(() => {
@@ -506,7 +512,7 @@ export default function App() {
         duration: '03:45',
         isPlaying: false,
         color: tracks.length % 2 === 0 ? 'cyan' : 'pink',
-        audioUrl: isDirectAudio ? rec.previewUrl : undefined,
+        audioUrl: playableUrl,
         previewUrl: rec.previewUrl,
       };
       setTracks(prev => [...prev, newTrack]);
@@ -514,14 +520,14 @@ export default function App() {
       if (notes) addLog(rec.agentLabel, `Notes integration: ${notes.slice(0, 50)}...`, 'success');
       addLog(
         rec.agentLabel,
-        isDirectAudio
+        playable
           ? `Track ready to play in the deck.`
           : `Added — preview only (no direct audio stream).`,
         'success'
       );
       notify({
-        title: isDirectAudio ? 'Track integrated' : 'Preview added',
-        message: isDirectAudio
+        title: playable ? 'Track integrated' : 'Preview added',
+        message: playable
           ? `${rec.title} ready to play.`
           : `${rec.title} — preview only (no direct stream).`,
         type: 'success',
