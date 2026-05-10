@@ -130,7 +130,7 @@ export const RickRubinAgent = ({ meditating = false }: RickRubinAgentProps) => {
       </motion.div>
 
       <div className="mt-3 flex flex-col items-center gap-1">
-        <div className={`px-3 py-1.5 rounded-full border flex items-center gap-2 group transition-all ${
+        <div className={`px-3 py-1.5 rounded-full border flex items-center gap-2 transition-all ${
           meditating ? 'bg-vdj-neon-magenta/10 border-vdj-neon-magenta/50 ring-glow-magenta' : 'bg-vdj-neon-cyan/10 border-vdj-neon-cyan/30'
         }`}>
           <div className={`w-1.5 h-1.5 rounded-full animate-ping ${meditating ? 'bg-vdj-neon-magenta' : 'bg-vdj-neon-cyan'}`} />

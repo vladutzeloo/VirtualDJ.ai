@@ -43,6 +43,7 @@ import { WeatherReading, summarizeForPrompt } from './services/weatherService';
 import { PlaylistPanel } from './components/PlaylistPanel';
 import { generateTrackArtwork, generateAgentAvatar } from './services/imageService';
 import { JulesAgent } from './components/JulesAgent';
+import { RickRubinAgent } from './components/RickRubinAgent';
 import { TrackModal } from './components/TrackModal';
 import { AIBrain } from './components/AIBrain';
 import { ControlDeck } from './components/ControlDeck';
@@ -1635,8 +1636,9 @@ function AppContent({
 
           <div className="flex flex-col gap-4">
              <div className="p-3 glass rounded-xl bg-gradient-to-br from-jarvis-accent-cyan/5 to-transparent border-jarvis-accent-cyan/10">
-                <div className="flex justify-center mb-4">
+                <div className="flex justify-center gap-4 mb-4">
                   <JulesAgent planning={loadingSuggestions || isDeploying} />
+                  <RickRubinAgent meditating={loadingSuggestions || isDeploying} />
                 </div>
                 <div className="flex items-center justify-between mb-2">
                    <div className="flex items-center gap-2">

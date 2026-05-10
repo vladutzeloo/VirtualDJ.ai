@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion } from 'motion/react';
-import { Bot, Zap, Activity, Music, Sparkles, Shield, Cpu } from 'lucide-react';
+import { Bot, Zap, Activity, Music, Sparkles, Shield, Cpu, Wind } from 'lucide-react';
 import { getAgentImage } from '../constants/agentImages';
 import { PERSONA_GENRE_SEED, type AgentPersona } from '../services/agentPersonas';
 
@@ -96,6 +96,19 @@ const AGENTS_LIST: ShowcaseAgent[] = [
     rarity: 'LEGENDARY',
     power: 91,
     skills: ['HARM-SCAN', 'SCALE-LOCK']
+  },
+  {
+    name: 'Rick Rubin',
+    role: 'Reductionist Producer',
+    description: 'Strips a mix to its truth. Asks what is essential, what is decoration, and what single moment should land hardest.',
+    icon: <Wind className="w-5 h-5" />,
+    color: 'amber',
+    accent: 'text-amber-200',
+    bg: 'bg-amber-500/10',
+    border: 'border-amber-500/20',
+    rarity: 'HOLO',
+    power: 97,
+    skills: ['STRIP', 'HONOR', 'ONE-MOMENT']
   }
 ];
 
