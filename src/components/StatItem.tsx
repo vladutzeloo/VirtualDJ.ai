@@ -7,6 +7,7 @@ interface StatItemProps {
   value: string;
   subValue?: string;
   theme?: 'dark' | 'light';
+  pct?: number;
 }
 
 const icons = {
@@ -16,7 +17,7 @@ const icons = {
   vram: Waves,
 };
 
-export const StatItem = ({ icon, label, value, subValue, theme = 'dark' }: StatItemProps) => {
+export const StatItem = ({ icon, label, value, subValue, theme = 'dark', pct }: StatItemProps) => {
   const Icon = icons[icon];
   return (
     <div className={`flex-1 flex items-center justify-center gap-3 px-4 py-1 border-r last:border-none group transition-colors ${
@@ -43,6 +44,16 @@ export const StatItem = ({ icon, label, value, subValue, theme = 'dark' }: StatI
             theme === 'dark' ? 'text-slate-700' : 'text-slate-300'
           }`}>{subValue}</span>}
         </div>
+        {pct !== undefined && (
+          <div className={`mt-1 h-[2px] w-full rounded-full overflow-hidden ${
+            theme === 'dark' ? 'bg-white/5' : 'bg-slate-200'
+          }`}>
+            <div
+              className="h-full bg-jarvis-accent-cyan shadow-[0_0_4px_rgba(0,242,255,0.6)] transition-all duration-500"
+              style={{ width: `${Math.max(0, Math.min(100, pct))}%` }}
+            />
+          </div>
+        )}
       </div>
     </div>
   );
