@@ -9,3 +9,7 @@ coverage/
 
 # Capacitor Android project — generated in CI from capacitor.config.ts.
 android/
+
+# Python bytecode from the ui-ux-pro-max skill (.claude/skills/ui-ux-pro-max/scripts/)
+__pycache__/
+*.pyc

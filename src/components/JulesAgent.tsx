@@ -96,18 +96,18 @@ export const JulesAgent = ({ planning = false }: JulesAgentProps) => {
         <div className={`absolute inset-0 rounded-full blur-xl animate-pulse ${planning ? 'bg-jarvis-accent-pink/20' : 'bg-jarvis-accent-cyan/5'}`} />
       </motion.div>
 
-      <div className="mt-2 flex flex-col items-center">
-        <div className={`px-3 py-1 rounded-full border flex items-center gap-2 group transition-all ${
-          planning ? 'bg-jarvis-accent-pink/10 border-jarvis-accent-pink/50' : 'bg-jarvis-accent-cyan/10 border-jarvis-accent-cyan/30'
+      <div className="mt-3 flex flex-col items-center gap-1">
+        <div className={`px-3 py-1.5 rounded-full border flex items-center gap-2 group transition-all ${
+          planning ? 'bg-vdj-neon-magenta/10 border-vdj-neon-magenta/50 ring-glow-magenta' : 'bg-vdj-neon-cyan/10 border-vdj-neon-cyan/30'
         }`}>
-          <div className={`w-1.5 h-1.5 rounded-full animate-ping ${planning ? 'bg-jarvis-accent-pink' : 'bg-jarvis-accent-cyan'}`} />
-          <span className="text-[10px] font-display font-bold text-white tracking-widest uppercase">
-            {planning ? 'Jules Thinking...' : 'Jules Waiting'}
+          <div className={`w-1.5 h-1.5 rounded-full animate-ping ${planning ? 'bg-vdj-neon-magenta' : 'bg-vdj-neon-cyan'}`} />
+          <span className="vdj-mono text-[10px] font-bold text-white tracking-[0.2em] uppercase">
+            {planning ? 'Jules · Thinking' : 'Jules · Waiting'}
           </span>
         </div>
-        <span className="text-[8px] font-mono text-slate-500 uppercase mt-1 tracking-widest flex items-center gap-1">
-          <span className={`w-1 h-1 rounded-full ${planning ? 'bg-jarvis-accent-pink animate-pulse' : 'bg-slate-700'}`} />
-          {planning ? 'SYNCING AGENTS' : 'IDLE STATE'}
+        <span className="vdj-eyebrow text-[8px] flex items-center gap-1">
+          <span className={`w-1 h-1 rounded-full ${planning ? 'bg-vdj-neon-magenta animate-pulse' : 'bg-vdj-text-subtle'}`} />
+          {planning ? 'SYNCING · AGENTS' : 'IDLE · STATE'}
         </span>
       </div>
     </div>

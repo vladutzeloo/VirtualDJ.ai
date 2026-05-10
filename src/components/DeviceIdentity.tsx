@@ -136,7 +136,7 @@ export const DeviceIdentity = ({ isOpen, onClose, theme, usage, telemetry }: Dev
                   {profile.brand}
                 </span>
                 <h3
-                  className={`text-2xl font-display font-black tracking-tight leading-none ${
+                  className={`text-2xl vdj-display font-bold tracking-[0.06em] leading-none ${
                     isDark ? 'text-white' : 'text-slate-900'
                   }`}
                 >
@@ -499,7 +499,7 @@ const UsageStat = ({ icon, label, value, isDark }: UsageStatProps) => (
       </span>
     </div>
     <span
-      className={`text-base font-display font-black tracking-tight ${
+      className={`text-base vdj-display font-bold tracking-[0.04em] ${
         isDark ? 'text-white' : 'text-slate-900'
       }`}
     >

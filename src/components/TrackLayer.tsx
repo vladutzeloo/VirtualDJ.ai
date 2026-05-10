@@ -70,7 +70,7 @@ export const TrackLayer = ({ title, track, onPlayToggle, currentTime = 0, totalS
         {track && (
           <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-jarvis-accent-pink/20 border border-jarvis-accent-pink/30">
             <Bot className="w-3 h-3 text-jarvis-accent-pink" />
-            <span className="text-[9px] font-display font-medium text-jarvis-accent-pink uppercase italic tracking-tighter">
+            <span className="vdj-mono text-[9px] font-bold text-jarvis-accent-pink uppercase tracking-[0.2em]">
               {track.agentLabel}
             </span>
           </div>

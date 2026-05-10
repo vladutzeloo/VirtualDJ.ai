@@ -88,13 +88,13 @@ export const AgentShowcase = () => {
   return (
     <div className="p-4 sm:p-8 flex flex-col gap-10">
       <div>
-        <div className="flex items-center gap-2 mb-2">
-           <Bot className="w-5 h-5 text-jarvis-accent-cyan" />
-           <h2 className="text-[10px] font-mono text-jarvis-accent-cyan uppercase tracking-[0.4em] font-black">Neural Entourage / V3.4</h2>
+        <div className="flex items-center gap-2 mb-3">
+           <Bot className="w-5 h-5 text-vdj-neon-cyan glow-cyan" />
+           <h2 className="vdj-eyebrow text-vdj-neon-cyan glow-cyan">Neural · Entourage · V3.4</h2>
         </div>
-        <h1 className="text-4xl font-display font-black text-slate-900 dark:text-white tracking-tighter">AI DJ PERSONAS</h1>
-        <p className="text-slate-500 mt-4 max-w-2xl font-mono text-xs leading-relaxed uppercase tracking-widest bg-slate-50 dark:bg-white/5 p-4 rounded-xl border border-slate-200 dark:border-white/5">
-          Collect and deploy specialized digital entities. Each persona features unique neural weights, rarity grades, and collectable skill sets.
+        <h1 className="vdj-display text-3xl sm:text-4xl font-bold text-slate-900 dark:text-white tracking-[0.06em]">AI DJ PERSONAS</h1>
+        <p className="text-vdj-text-muted mt-4 max-w-2xl font-sans text-sm leading-relaxed bg-slate-50 dark:bg-vdj-surface/40 p-4 rounded-xl border border-slate-200 dark:border-vdj-border">
+          Collect and deploy specialized digital entities. Each persona ships with unique neural weights, a rarity grade, and a curated skill set.
         </p>
       </div>
 

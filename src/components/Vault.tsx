@@ -110,12 +110,12 @@ export const Vault = ({ isOpen, onClose, theme }: VaultProps) => {
               {isUnlocked ? <Unlock className="w-5 h-5 shadow-[0_0_10px_rgba(16,185,129,0.5)]" /> : <Lock className="w-5 h-5 shadow-[0_0_10px_rgba(0,242,255,0.5)]" />}
             </div>
             <div>
-              <h2 className={`text-sm font-display font-black tracking-widest uppercase ${
+              <h2 className={`text-sm vdj-display font-bold tracking-[0.2em] uppercase ${
                 theme === 'dark' ? 'text-white' : 'text-slate-900'
               }`}>
                 Neural Vault
               </h2>
-              <span className="text-[10px] font-mono text-slate-500 uppercase font-black tracking-tighter">API & Credential Management</span>
+              <span className="vdj-eyebrow text-[9px]">API · Credential · Management</span>
             </div>
           </div>
           <button onClick={onClose} className="p-2 rounded-full hover:bg-white/5 text-slate-500 transition-colors">
@@ -164,7 +164,7 @@ export const Vault = ({ isOpen, onClose, theme }: VaultProps) => {
                 </div>
 
                 <div className="text-center space-y-2">
-                  <h3 className={`text-lg font-display font-black tracking-tight ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>
+                  <h3 className={`text-lg vdj-display font-bold tracking-[0.08em] ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>
                     AUTHENTICATION REQUIRED
                   </h3>
                   <p className="text-xs font-mono text-slate-500 uppercase tracking-widest max-w-[240px] mx-auto">

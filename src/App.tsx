@@ -58,12 +58,12 @@ import { BellOff, Volume1, VolumeX } from 'lucide-react';
 import { useMotionControls, vibrate } from './hooks/useMotionControls';
 
 const STATIONS = [
-  { id: 'sw', label: 'Synthwave', sub: 'SYNTHWAVE', color: 'bg-pink-600/20 text-pink-400 border-pink-500/30' },
-  { id: 'cp', label: 'Cyberpunk', sub: 'CYBERPUNK', color: 'bg-cyan-600/20 text-cyan-400 border-cyan-500/30' },
-  { id: 'el', label: 'Electronic', sub: 'ELECTRONIC', color: 'bg-emerald-600/20 text-emerald-400 border-emerald-500/30' },
-  { id: 'tc', label: 'Techno', sub: 'TECHNO', color: 'bg-indigo-600/20 text-indigo-400 border-indigo-500/30' },
-  { id: 'tr', label: 'Trap', sub: 'TRAP', color: 'bg-orange-600/20 text-orange-400 border-orange-500/30' },
-  { id: 'rk', label: 'Rock', sub: 'ROCK', color: 'bg-red-600/20 text-red-400 border-red-500/30' },
+  { id: 'sw', label: 'Synthwave',  sub: 'SYNTHWAVE',  color: 'bg-fuchsia-500/15 text-fuchsia-300 border-fuchsia-500/30 hover:bg-fuchsia-500/25' },
+  { id: 'cp', label: 'Cyberpunk',  sub: 'CYBERPUNK',  color: 'bg-cyan-500/15 text-cyan-300 border-cyan-500/30 hover:bg-cyan-500/25' },
+  { id: 'el', label: 'Electronic', sub: 'ELECTRONIC', color: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30 hover:bg-emerald-500/25' },
+  { id: 'tc', label: 'Techno',     sub: 'TECHNO',     color: 'bg-indigo-500/15 text-indigo-300 border-indigo-500/30 hover:bg-indigo-500/25' },
+  { id: 'tr', label: 'Trap',       sub: 'TRAP',       color: 'bg-amber-500/15 text-amber-300 border-amber-500/30 hover:bg-amber-500/25' },
+  { id: 'rk', label: 'Rock',       sub: 'ROCK',       color: 'bg-rose-500/15 text-rose-300 border-rose-500/30 hover:bg-rose-500/25' },
 ];
 
 interface LogEntry {
@@ -979,20 +979,22 @@ function AppContent({
       {/* Top Header - Hidden on Mobile to save space */}
       {!isMobile && (
         <header className={`flex items-center justify-between px-6 py-4 border-b transition-colors z-50 ${
-          theme === 'dark' ? 'border-jarvis-border bg-black/20 backdrop-blur-xl' : 'border-slate-200 bg-white/80'
+          theme === 'dark' ? 'border-vdj-border bg-vdj-bg/60 backdrop-blur-xl' : 'border-slate-200 bg-white/80'
         }`}>
           <div className="flex items-center gap-12">
             <Logo />
 
-            <nav className="hidden md:flex items-center gap-2">
+            <nav className="hidden md:flex items-center gap-1 p-1 rounded-full border border-vdj-border bg-vdj-surface/40 backdrop-blur-md">
               {['RADIO', 'SIGNALS', 'CRATE', 'MIXER', 'AGENTS', 'BRAIN'].map(item => (
                 <button
                   key={item}
                   onClick={() => setActiveTab(item)}
-                  className={`px-3 py-1 text-[11px] font-mono font-bold tracking-widest transition-all rounded-md ${
-                    activeTab === item 
-                      ? theme === 'dark' ? 'bg-jarvis-accent-cyan/20 text-jarvis-accent-cyan border border-jarvis-accent-cyan/30' : 'bg-jarvis-accent-cyan/10 text-jarvis-accent-cyan border border-jarvis-accent-cyan/20'
-                      : theme === 'dark' ? 'text-slate-500 hover:text-slate-300' : 'text-slate-400 hover:text-slate-600'
+                  className={`px-3 py-1.5 text-[10px] font-mono font-bold tracking-[0.2em] transition-all rounded-full ${
+                    activeTab === item
+                      ? theme === 'dark'
+                        ? 'bg-vdj-neon-cyan/15 text-vdj-neon-cyan ring-1 ring-vdj-neon-cyan/40 glow-cyan'
+                        : 'bg-vdj-neon-cyan/10 text-vdj-neon-cyan ring-1 ring-vdj-neon-cyan/30'
+                      : theme === 'dark' ? 'text-vdj-text-muted hover:text-vdj-text' : 'text-slate-400 hover:text-slate-600'
                   }`}
                 >
                   {item}
@@ -1217,8 +1219,8 @@ function AppContent({
         {/* Left Sidebar - Stations */}
         <aside className={`${isMobile ? 'hidden' : 'hidden lg:flex'} w-52 border-r border-jarvis-border flex-col p-4 gap-4 bg-jarvis-card/30 glass overflow-y-auto custom-scrollbar`}>
           <div className="flex flex-col gap-3">
-             <h3 className="text-[10px] font-display font-bold uppercase tracking-[0.2em] text-jarvis-accent-cyan flex justify-between">
-               STATIONS <span>via Audius</span>
+             <h3 className="vdj-eyebrow text-vdj-neon-cyan glow-cyan flex justify-between">
+               <span>STATIONS</span><span className="text-vdj-text-subtle">via Audius</span>
              </h3>
              <div className="grid grid-cols-2 gap-2">
                 {STATIONS.map(station => (
@@ -1383,8 +1385,8 @@ function AppContent({
           ) : activeTab === 'MIXER' && isMobile ? (
             <div className="flex flex-col gap-10 py-10">
                <div className="flex flex-col items-center gap-2">
-                  <span className="text-[10px] font-mono font-black text-jarvis-accent-cyan tracking-[0.4em] uppercase drop-shadow-[0_0_8px_rgba(0,242,255,0.3)]">Neural Console</span>
-                  <h2 className="text-white font-display text-2xl font-black tracking-tighter drop-shadow-md">MASTER MIXER</h2>
+                  <span className="vdj-eyebrow text-vdj-neon-cyan glow-cyan">Neural Console</span>
+                  <h2 className="text-white vdj-display text-2xl font-bold tracking-[0.06em] drop-shadow-md">MASTER MIXER</h2>
                </div>
                
                <div className="grid grid-cols-3 gap-6 px-4">
@@ -1426,12 +1428,12 @@ function AppContent({
                <div className="px-6 flex flex-col gap-4">
                   <h3 className="text-xs font-mono font-black text-white/40 tracking-widest uppercase">Deck Status</h3>
                   <div className="grid grid-cols-2 gap-4">
-                     <div className="p-4 rounded-2xl bg-jarvis-accent-cyan/10 border border-jarvis-accent-cyan/30">
-                        <span className="text-[8px] font-mono font-black text-jarvis-accent-cyan block mb-1">DECK A</span>
+                     <div className="p-4 rounded-2xl bg-vdj-neon-cyan/10 border border-vdj-neon-cyan/30 ring-glow-cyan">
+                        <span className="vdj-eyebrow text-vdj-neon-cyan block mb-1">DECK · A</span>
                         <p className="text-white font-bold truncate text-xs">{tracks[0]?.title || 'EMPTY'}</p>
                      </div>
-                     <div className="p-4 rounded-2xl bg-jarvis-accent-pink/10 border border-jarvis-accent-pink/30">
-                        <span className="text-[8px] font-mono font-black text-jarvis-accent-pink block mb-1">DECK B</span>
+                     <div className="p-4 rounded-2xl bg-vdj-neon-magenta/10 border border-vdj-neon-magenta/30 ring-glow-magenta">
+                        <span className="vdj-eyebrow text-vdj-neon-magenta block mb-1">DECK · B</span>
                         <p className="text-white font-bold truncate text-xs">{tracks[1]?.title || 'EMPTY'}</p>
                      </div>
                   </div>
@@ -1532,13 +1534,15 @@ function AppContent({
           <div className="flex flex-col gap-4 mt-4">
              <div className="flex items-center justify-between gap-4">
                 <div className="flex items-center gap-2">
-                   <TrendingUp className="w-4 h-4 text-jarvis-accent-pink" />
-                   <h2 className="text-sm font-display font-bold uppercase tracking-[0.2em] text-white italic underline decoration-jarvis-accent-pink decoration-2 underline-offset-8">AI SUGGESTIONS</h2>
+                   <TrendingUp className="w-4 h-4 text-vdj-neon-magenta glow-magenta" />
+                   <h2 className="vdj-display text-sm font-bold tracking-[0.18em] text-white">AI SUGGESTIONS</h2>
+                   <span className="h-[2px] w-12 rounded-full bg-vdj-neon-magenta/70" />
                 </div>
-                <div className="flex items-center gap-2 glass px-3 py-1 rounded-full border-jarvis-accent-cyan/20">
-                   <Bot className="w-4 h-4 text-jarvis-accent-cyan" />
-                   <span className="text-[10px] font-mono text-slate-400">Agent:</span>
-                   <span className="text-[10px] font-mono font-bold text-jarvis-accent-cyan uppercase">Auto-Curator V.2</span>
+                <div className="flex items-center gap-2 glass px-3 py-1.5 rounded-full border-vdj-neon-cyan/30">
+                   <span className="w-1.5 h-1.5 rounded-full bg-vdj-cta animate-pulse" />
+                   <Bot className="w-4 h-4 text-vdj-neon-cyan" />
+                   <span className="vdj-mono text-[10px] text-vdj-text-muted">Agent</span>
+                   <span className="vdj-mono text-[10px] font-bold text-vdj-neon-cyan uppercase tracking-[0.2em]">Auto-Curator V.2</span>
                 </div>
              </div>
 
