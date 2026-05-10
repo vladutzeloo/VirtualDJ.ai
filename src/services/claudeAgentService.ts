@@ -55,6 +55,7 @@ export interface SkillRunOptions {
   userPrompt: string;
   model?: string;
   maxTokens?: number;
+  agentBriefing?: string;
 }
 
 export const runDjSkill = async <T = unknown>({
@@ -62,15 +63,19 @@ export const runDjSkill = async <T = unknown>({
   userPrompt,
   model = 'claude-sonnet-4-6',
   maxTokens = 1024,
+  agentBriefing,
 }: SkillRunOptions): Promise<T> => {
   const skill = DJ_SKILLS[skillId];
   if (!skill) throw new Error(`Unknown DJ skill: ${skillId}`);
 
   const client = getClient();
+  const system = agentBriefing
+    ? `${skill.systemPrompt}\n\nThe user has rated other AI agent personas. Lean toward TRUSTED personas' style, avoid the AVOID personas' patterns:\n\n${agentBriefing}`
+    : skill.systemPrompt;
   const response = await client.messages.create({
     model,
     max_tokens: maxTokens,
-    system: skill.systemPrompt,
+    system,
     messages: [{ role: 'user', content: userPrompt }],
   });
 

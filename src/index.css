@@ -139,6 +139,13 @@
   0%   { background-position: -200% 0; }
   100% { background-position: 200% 0; }
 }
+@keyframes vdj-spin-slow {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+.animate-spin-slow {
+  animation: vdj-spin-slow 8s linear infinite;
+}
 
 .vdj-scanlines::before {
   content: "";

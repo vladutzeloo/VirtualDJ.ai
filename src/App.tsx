@@ -28,7 +28,9 @@ import {
   Volume2,
   Moon,
   Sun,
-  Smartphone
+  Smartphone,
+  ShoppingBag,
+  Coins
 } from "lucide-react";
 import { StatItem } from './components/StatItem';
 import { MixerKnob } from './components/MixerKnob';
@@ -47,6 +49,16 @@ import { AgentShowcase } from './components/AgentShowcase';
 import { RecordPicker } from './components/RecordPicker';
 import { SocialPickups } from './components/SocialPickups';
 import { Vault } from './components/Vault';
+import { DJShop } from './components/DJShop';
+import { DEFAULT_SKIN_ID, DJSkin, findSkin } from './data/djSkins';
+import {
+  AgentReputations,
+  blankRep,
+  formatAgentBriefing,
+  loadReputations,
+  persistReputations,
+} from './services/agentReputationService';
+import { AgentRanker } from './components/AgentRanker';
 
 import { Logo } from './components/Logo';
 import { DeviceIdentity } from './components/DeviceIdentity';
@@ -80,6 +92,152 @@ export default function App() {
   const [activeTab, setActiveTab] = useState('RADIO');
   const [isVaultOpen, setIsVaultOpen] = useState(false);
   const [isDeviceIdentityOpen, setIsDeviceIdentityOpen] = useState(false);
+  const [isShopOpen, setIsShopOpen] = useState(false);
+
+  const SHOP_STORAGE_KEY = 'vdj.shop.v1';
+  type ShopState = {
+    credits: number;
+    ownedSkinIds: string[];
+    equippedSkinId: string;
+  };
+  const [shopState, setShopState] = useState<ShopState>(() => {
+    const fallback: ShopState = {
+      credits: 500,
+      ownedSkinIds: [DEFAULT_SKIN_ID],
+      equippedSkinId: DEFAULT_SKIN_ID,
+    };
+    if (typeof window === 'undefined') return fallback;
+    try {
+      const raw = window.localStorage.getItem(SHOP_STORAGE_KEY);
+      if (!raw) return fallback;
+      const parsed = JSON.parse(raw);
+      const owned = Array.isArray(parsed.ownedSkinIds) ? parsed.ownedSkinIds.filter((x: any) => typeof x === 'string') : [];
+      if (!owned.includes(DEFAULT_SKIN_ID)) owned.unshift(DEFAULT_SKIN_ID);
+      const equipped = typeof parsed.equippedSkinId === 'string' && owned.includes(parsed.equippedSkinId)
+        ? parsed.equippedSkinId
+        : DEFAULT_SKIN_ID;
+      return {
+        credits: typeof parsed.credits === 'number' && parsed.credits >= 0 ? parsed.credits : fallback.credits,
+        ownedSkinIds: owned,
+        equippedSkinId: equipped,
+      };
+    } catch {
+      return fallback;
+    }
+  });
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      window.localStorage.setItem(SHOP_STORAGE_KEY, JSON.stringify(shopState));
+    } catch {
+      /* storage unavailable */
+    }
+  }, [shopState]);
+
+  const awardCredits = (amount: number) => {
+    if (amount <= 0) return;
+    setShopState(prev => ({ ...prev, credits: prev.credits + amount }));
+  };
+
+  const purchaseSkin = (skin: DJSkin): boolean => {
+    let purchased = false;
+    setShopState(prev => {
+      if (prev.ownedSkinIds.includes(skin.id)) return prev;
+      if (prev.credits < skin.price) return prev;
+      purchased = true;
+      return {
+        ...prev,
+        credits: prev.credits - skin.price,
+        ownedSkinIds: [...prev.ownedSkinIds, skin.id],
+        equippedSkinId: skin.id,
+      };
+    });
+    if (purchased) {
+      addLog('OUTFITTER', `Acquired skin "${skin.name}" — equipping.`, 'success');
+      notify({
+        title: `Equipped ${skin.name}`,
+        message: `${skin.price.toLocaleString()} credits spent.`,
+        type: 'success',
+        agent: 'OUTFITTER',
+        sound: 'deploy',
+        duration: 2200,
+      });
+    }
+    return purchased;
+  };
+
+  const equipSkin = (skin: DJSkin) => {
+    setShopState(prev =>
+      prev.ownedSkinIds.includes(skin.id) ? { ...prev, equippedSkinId: skin.id } : prev,
+    );
+    addLog('OUTFITTER', `Skin loaded: ${skin.name}.`, 'info');
+  };
+
+  const equippedSkin = findSkin(shopState.equippedSkinId);
+
+  const [agentReputations, setAgentReputations] = useState<AgentReputations>(() => loadReputations());
+
+  useEffect(() => {
+    persistReputations(agentReputations);
+  }, [agentReputations]);
+
+  const AGENT_LIKE_BONUS = 50;
+
+  type AgentEvent = 'trackLike' | 'trackDislike' | 'upvote' | 'downvote';
+  const recordAgentFeedback = (
+    agentLabel: string,
+    event: AgentEvent,
+    note?: string,
+  ) => {
+    if (!agentLabel) return;
+    setAgentReputations(prev => {
+      const current = prev[agentLabel] ?? blankRep(agentLabel);
+      const next = { ...current, lastFeedbackAt: Date.now() };
+      if (event === 'trackLike') {
+        next.trackLikes += 1;
+        next.bonusCreditsEarned += AGENT_LIKE_BONUS;
+      } else if (event === 'trackDislike') {
+        next.trackDislikes += 1;
+      } else if (event === 'upvote') {
+        next.upvotes += 1;
+      } else {
+        next.downvotes += 1;
+      }
+      const trimmedNote = note?.trim();
+      if (trimmedNote) {
+        next.notes = [...current.notes, trimmedNote.slice(0, 140)].slice(-12);
+      }
+      return { ...prev, [agentLabel]: next };
+    });
+  };
+
+  const rateAgent = (agentLabel: string, vote: 'up' | 'down') => {
+    if (vote === 'up') {
+      recordAgentFeedback(agentLabel, 'upvote');
+      awardCredits(15);
+      addLog('AGENT-RANK', `Upvoted ${agentLabel}. Reputation strengthened.`, 'success');
+      notify({
+        title: `${agentLabel} upvoted`,
+        message: '+15 credits · agent context updated.',
+        type: 'success',
+        agent: 'AGENT-RANK',
+        sound: 'like',
+        duration: 2000,
+      });
+    } else {
+      recordAgentFeedback(agentLabel, 'downvote');
+      addLog('AGENT-RANK', `Downvoted ${agentLabel}. Future picks will be deprioritized.`, 'warn');
+      notify({
+        title: `${agentLabel} downvoted`,
+        message: 'Agent will be deprioritized in future calls.',
+        type: 'warn',
+        agent: 'AGENT-RANK',
+        sound: 'pause',
+        duration: 2000,
+      });
+    }
+  };
   const telemetry = useDeviceTelemetry();
   const [usage, setUsage] = useState({
     sessionStart: Date.now(),
@@ -198,10 +356,35 @@ export default function App() {
       removePref('disliked', rec.id);
       upsertPref('liked', updated);
       onLikeIncrement();
+      if (rec.agentLabel) {
+        recordAgentFeedback(rec.agentLabel, 'trackLike', reason);
+        awardCredits(AGENT_LIKE_BONUS);
+        addLog(
+          rec.agentLabel,
+          `+${AGENT_LIKE_BONUS} bonus credits — agent's pick "${rec.title}" was liked.`,
+          'success',
+        );
+        notify({
+          title: `${rec.agentLabel} earned you ${AGENT_LIKE_BONUS} credits`,
+          message: `For finding "${rec.title}".`,
+          type: 'success',
+          agent: rec.agentLabel,
+          sound: 'like',
+          duration: 2400,
+        });
+      }
       addLog('TASTE-AGENT', `Liked "${rec.title}". Updating taste profile.`, 'success');
     } else {
       removePref('liked', rec.id);
       upsertPref('disliked', updated);
+      if (rec.agentLabel) {
+        recordAgentFeedback(rec.agentLabel, 'trackDislike', reason);
+        addLog(
+          rec.agentLabel,
+          `Reputation dinged — pick "${rec.title}" was disliked.`,
+          'warn',
+        );
+      }
       addLog('TASTE-AGENT', `Disliked "${rec.title}". Updating taste profile.`, 'warn');
     }
   };
@@ -218,8 +401,10 @@ export default function App() {
     addLog('PLAYLIST', `Sent "${rec.title}" to playlist.`, 'success');
   };
 
-  const onLikeIncrement = () =>
+  const onLikeIncrement = () => {
     setUsage(prev => ({ ...prev, tracksLiked: prev.tracksLiked + 1 }));
+    awardCredits(10);
+  };
   const [isDeploying, setIsDeploying] = useState(false);
   const [searchQuery, setSearchQuery] = useState('spor dnb');
   const [searchMode, setSearchMode] = useState<'GLOBAL' | 'LOCAL'>('GLOBAL');
@@ -339,6 +524,7 @@ export default function App() {
         setTracks(prev => prev.map(t => ({ ...t, isPlaying: t.id === track.id })));
         setLocalTracks(prev => prev.map(t => ({ ...t, isPlaying: t.id === track.id })));
         setUsage(p => ({ ...p, tracksPlayed: p.tracksPlayed + 1 }));
+        awardCredits(25);
         addLog(track.agentLabel, `Playing: ${track.title}`, 'success');
         vibrate([20, 30, 20]);
       })
@@ -392,6 +578,7 @@ export default function App() {
   const fetchSuggestions = async (query: string) => {
     setLoadingSuggestions(true);
     setUsage(prev => ({ ...prev, searchesRun: prev.searchesRun + 1 }));
+    awardCredits(5);
     const agent = searchMode === 'GLOBAL' ? 'DIGGER' : 'LOCAL-BOT';
     addLog(agent, `Scanning ${searchMode.toLowerCase()} archives for ${query}...`, 'info');
     notify({
@@ -402,7 +589,15 @@ export default function App() {
       sound: 'scan',
       duration: 2200,
     });
-    const recs = await searchPlayableTracks(`${query}${searchMode === 'LOCAL' ? ' (local recording style)' : ''}`);
+    const briefing = formatAgentBriefing(agentReputations);
+    if (briefing) {
+      addLog('AGENT-RANK', 'Injecting agent reputation briefing into recommender context.', 'info');
+    }
+    const recs = await searchPlayableTracks(
+      `${query}${searchMode === 'LOCAL' ? ' (local recording style)' : ''}`,
+      8,
+      briefing,
+    );
     const hydrated = recs.map(rec => {
       const liked = prefs.liked.find(t => t.id === rec.id);
       const disliked = prefs.disliked.find(t => t.id === rec.id);
@@ -663,6 +858,11 @@ export default function App() {
             setTheme={setTheme}
             isVaultOpen={isVaultOpen}
             setIsVaultOpen={setIsVaultOpen}
+            onOpenShop={() => setIsShopOpen(true)}
+            credits={shopState.credits}
+            equippedSkin={equippedSkin}
+            agentReputations={agentReputations}
+            onRateAgent={rateAgent}
             activeTab={activeTab}
             setActiveTab={setActiveTab}
             tracks={tracks}
@@ -746,6 +946,18 @@ export default function App() {
       />
 
       <AnimatePresence>
+        {isShopOpen && (
+          <DJShop
+            isOpen={isShopOpen}
+            onClose={() => setIsShopOpen(false)}
+            theme={theme}
+            credits={shopState.credits}
+            ownedSkinIds={shopState.ownedSkinIds}
+            equippedSkinId={shopState.equippedSkinId}
+            onPurchase={purchaseSkin}
+            onEquip={equipSkin}
+          />
+        )}
         {isVaultOpen && <Vault isOpen={isVaultOpen} onClose={() => setIsVaultOpen(false)} theme={theme} />}
         {isDeviceIdentityOpen && (
           <DeviceIdentity
@@ -777,6 +989,11 @@ function AppContent({
   setTheme,
   isVaultOpen,
   setIsVaultOpen,
+  onOpenShop,
+  credits,
+  equippedSkin,
+  agentReputations,
+  onRateAgent,
   activeTab,
   setActiveTab,
   tracks,
@@ -1033,6 +1250,25 @@ function AppContent({
             </div>
             <div className="flex items-center gap-3 relative">
               <button
+                onClick={() => {
+                  playSound('click');
+                  onOpenShop?.();
+                }}
+                className={`relative flex items-center gap-1.5 px-2.5 py-1 rounded-md border text-[10px] font-mono font-bold tracking-widest uppercase transition-colors ${
+                  theme === 'dark'
+                    ? 'bg-jarvis-accent-cyan/10 border-jarvis-accent-cyan/40 text-jarvis-accent-cyan hover:bg-jarvis-accent-cyan/20'
+                    : 'bg-jarvis-accent-cyan/5 border-jarvis-accent-cyan/30 text-jarvis-accent-cyan hover:bg-jarvis-accent-cyan/10'
+                }`}
+                title={`DJ Shop · ${credits?.toLocaleString?.() ?? 0} credits`}
+              >
+                <ShoppingBag className="w-3.5 h-3.5" />
+                Shop
+                <span className="hidden sm:inline-flex items-center gap-1 ml-1 px-1.5 py-0.5 rounded-sm bg-amber-400/15 text-amber-300 text-[9px]">
+                  <Coins className="w-2.5 h-2.5" />
+                  {credits?.toLocaleString?.() ?? 0}
+                </span>
+              </button>
+              <button
                 onClick={() => onOpenPlaylist?.()}
                 className={`relative p-1.5 rounded-md transition-colors ${theme === 'dark' ? 'text-slate-500 hover:text-jarvis-accent-cyan' : 'text-slate-400 hover:text-slate-600'}`}
                 title="My Playlist & Taste Agent"
@@ -1112,6 +1348,24 @@ function AppContent({
                 }`}
               >
                 <Settings className="w-5 h-5" />
+              </button>
+              <button
+                onClick={() => {
+                  playSound('click');
+                  onOpenShop?.();
+                }}
+                className={`relative w-10 h-10 rounded-full flex items-center justify-center border transition-all ${
+                  theme === 'dark'
+                    ? 'bg-jarvis-accent-cyan/10 border-jarvis-accent-cyan/30 text-jarvis-accent-cyan'
+                    : 'bg-jarvis-accent-cyan/5 border-jarvis-accent-cyan/30 text-jarvis-accent-cyan'
+                }`}
+                title={`DJ Shop · ${credits?.toLocaleString?.() ?? 0} credits`}
+                aria-label="Open DJ Shop"
+              >
+                <ShoppingBag className="w-5 h-5" />
+                <span className="absolute -bottom-1 -right-1 min-w-[18px] h-[14px] px-1 rounded-full bg-amber-400/90 text-[8px] font-mono font-black text-slate-900 flex items-center justify-center shadow-[0_0_8px_rgba(251,191,36,0.6)]">
+                  {(credits ?? 0) > 999 ? `${Math.floor((credits ?? 0) / 1000)}k` : credits ?? 0}
+                </span>
               </button>
               <button
                 onClick={() => onOpenPlaylist?.()}
@@ -1447,7 +1701,7 @@ function AppContent({
             </div>
           ) : (
             <>
-              <Turntable3D isPlaying={tracks.some((t: any) => t.isPlaying)} />
+              <Turntable3D isPlaying={tracks.some((t: any) => t.isPlaying)} skin={equippedSkin} />
 
               {/* Top Mix Area */}
           <div className={`grid ${isMobile ? 'grid-cols-1' : 'grid-cols-1 md:grid-cols-2'} gap-6 items-start`}>
@@ -1551,6 +1805,13 @@ function AppContent({
                    <span className="vdj-mono text-[10px] font-bold text-vdj-neon-cyan uppercase tracking-[0.2em]">Auto-Curator V.2</span>
                 </div>
              </div>
+
+             <AgentRanker
+               reputations={agentReputations}
+               agentAvatars={agentAvatars}
+               onRate={onRateAgent}
+               visibleAgentLabels={suggestions.map((s: TrackRecommendation) => s.agentLabel)}
+             />
 
              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 relative">
                 {/* Discovery Animation 1: Scanning Overlay */}

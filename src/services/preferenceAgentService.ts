@@ -65,6 +65,7 @@ const buildUserPayload = (entries: FeedbackEntry[]): string => {
 export const analyzePreferences = async (
   feedback: FeedbackEntry[],
   model = 'claude-sonnet-4-6',
+  agentBriefing?: string,
 ): Promise<TasteProfile> => {
   if (feedback.length === 0) {
     return {
@@ -78,10 +79,13 @@ export const analyzePreferences = async (
   }
 
   const client = getClient();
+  const system = agentBriefing
+    ? `${SYSTEM_PROMPT}\n\nThe user has also rated the AI agent personas themselves. Weight TRUSTED personas' previous picks more heavily and discount AVOID personas when summarising taste.\n\n${agentBriefing}`
+    : SYSTEM_PROMPT;
   const response = await client.messages.create({
     model,
     max_tokens: 1024,
-    system: SYSTEM_PROMPT,
+    system,
     messages: [{ role: 'user', content: buildUserPayload(feedback) }],
   });
 
