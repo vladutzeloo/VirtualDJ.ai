@@ -7,19 +7,28 @@ import {
   recognizeFromVideo,
   mapGestureToAction,
 } from '../services/gestureService';
+import { getApiKey, markKeyUsed } from '../services/apiKeyManager';
+import { recordUsage } from '../services/usageTracker';
 
 let aiInstance: GoogleGenAI | null = null;
+let aiInstanceKey: string | null = null;
 
 const getAI = () => {
-  if (!aiInstance) {
-    const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) {
-      throw new Error("GEMINI_API_KEY is not set. Please provide it in the environment.");
-    }
-    aiInstance = new GoogleGenAI({ apiKey });
+  const apiKey = getApiKey('gemini');
+  if (!apiKey) {
+    throw new Error(
+      'GEMINI_API_KEY is not set. Add it via the Neural Vault or your environment.',
+    );
   }
+  if (!aiInstance || aiInstanceKey !== apiKey) {
+    aiInstance = new GoogleGenAI({ apiKey });
+    aiInstanceKey = apiKey;
+  }
+  markKeyUsed('gemini');
   return aiInstance;
 };
+
+const estimateTokens = (text: string) => Math.ceil((text || '').length / 4);
 
 interface VisionScannerProps {
   onScanResult: (context: string) => void;
@@ -83,6 +92,16 @@ export const VisionScanner = ({ onScanResult, onGesture, onClose }: VisionScanne
       });
 
       const text = generation.text?.trim();
+      const meta: any = (generation as any)?.usageMetadata ?? {};
+      recordUsage({
+        provider: 'gemini',
+        model: 'gemini-3-flash-preview',
+        feature: 'vision-scan',
+        inputTokens: Number(meta?.promptTokenCount ?? estimateTokens(prompt)),
+        outputTokens: Number(
+          meta?.candidatesTokenCount ?? estimateTokens(text ?? ''),
+        ),
+      });
       if (text) {
         setResult(text);
         onScanResult(text);

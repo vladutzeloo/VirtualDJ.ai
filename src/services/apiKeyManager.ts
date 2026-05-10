@@ -7,7 +7,7 @@
  * in localStorage from leaking secrets.
  */
 
-export type ProviderId = 'gemini' | 'anthropic' | 'kimi' | 'openai';
+export type ProviderId = 'gemini' | 'anthropic' | 'kimi' | 'openai' | 'nvidia';
 
 export interface ProviderMeta {
   id: ProviderId;
@@ -55,6 +55,15 @@ export const PROVIDERS: Record<ProviderId, ProviderMeta> = {
     consoleUrl: 'https://platform.openai.com/api-keys',
     keyPrefix: 'sk-',
     description: 'Optional drop-in for Whisper transcription and GPT mixing tips.',
+  },
+  nvidia: {
+    id: 'nvidia',
+    name: 'NVIDIA NIM',
+    shortName: 'NVIDIA',
+    envVar: 'NVIDIA_API_KEY',
+    consoleUrl: 'https://build.nvidia.com/explore/discover',
+    keyPrefix: 'nvapi-',
+    description: 'NVIDIA NIM inference (Llama, Nemotron, Mixtral) via OpenAI-compatible endpoint.',
   },
 };
 

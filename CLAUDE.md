@@ -9,6 +9,7 @@ VirtualDJ.AI is a professional AI-powered DJ workstation delivered as a single-p
 - **Google Gemini** with Google Search grounding — live track discovery and recommendations.
 - **Anthropic Claude** — DJ skill agents (setlist curator, crowd reader, mix coach).
 - **Moonshot Kimi** — auxiliary OpenAI-compatible chat surface.
+- **NVIDIA NIM** — OpenAI-compatible Llama / Nemotron / Mixtral inference (`nvidiaService`).
 - **MediaPipe Tasks Vision** — gesture/vision input.
 - **WebAuthn (SimpleWebAuthn)** — Neural Vault biometric auth.
 
@@ -34,9 +35,17 @@ Secrets are loaded by Vite from `.env.local` and injected into the bundle via `d
 Required / optional keys (see `.env.example`):
 
 - `GEMINI_API_KEY` — required for `musicService` (track recommendations + Google Search grounding).
-- `ANTHROPIC_API_KEY` — required for `claudeAgentService` (DJ skills).
+- `ANTHROPIC_API_KEY` — required for `claudeAgentService` and `preferenceAgentService` (DJ skills + taste analysis).
 - `KIMI_API_KEY` — optional, Moonshot AI.
+- `NVIDIA_API_KEY` — optional, NVIDIA NIM (`nvapi-…`) for `nvidiaService` (OpenAI-compatible Llama/Nemotron/Mixtral).
+- `OPENAI_API_KEY` — optional, recognized by the Neural Vault for future drop-in use.
 - `APP_URL` — auto-injected by AI Studio at runtime (Cloud Run URL).
+
+All provider keys may also be supplied at runtime via the WebAuthn-gated **Neural Vault**
+(`src/components/Vault.tsx`). Services resolve keys through `apiKeyManager.getApiKey()`,
+which prefers a vault-stored key and falls back to the `process.env.*` injected at build time.
+**Never read `process.env.*_API_KEY` directly from a service or component** — always go
+through `apiKeyManager`.
 
 `DISABLE_HMR=true` disables Vite HMR — set by AI Studio to prevent flicker during agent edits. Do not change the HMR guard in `vite.config.ts`.
 
@@ -59,9 +68,15 @@ src/
 ├── hooks/
 │   └── useDeviceTelemetry.ts   # FPS, network, battery sampling
 ├── services/                   # All external I/O lives here
+│   ├── apiKeyManager.ts        # Vault-backed key resolution (prefer over process.env)
+│   ├── usageTracker.ts         # Token / cost ledger surfaced in the Neural Vault
 │   ├── musicService.ts         # Gemini + Google Search grounding
 │   ├── claudeAgentService.ts   # Anthropic SDK, DJ_SKILLS registry
+│   ├── preferenceAgentService.ts # Anthropic taste-profile analyzer
+│   ├── nvidiaService.ts        # NVIDIA NIM (OpenAI-compatible) chat completions
 │   ├── imageService.ts         # AI artwork / avatar generation
+│   ├── audiusService.ts        # Audius public discovery + streaming
+│   ├── soundService.ts         # Local SFX / notification cues
 │   ├── biometricService.ts     # WebAuthn registration & assertion
 │   └── gestureService.ts       # MediaPipe hand-gesture pipeline
 ├── constants/agentImages.ts
@@ -76,18 +91,25 @@ src/
 
 ### AI service conventions
 
-Each service in `src/services/` lazy-initializes its SDK client inside a `getClient()` / `getAI()` helper and throws a descriptive error when the matching env var is missing. When adding a new AI provider, follow the same pattern:
+Each service in `src/services/` lazy-initializes its SDK client inside a `getClient()` / `getAI()` helper and throws a descriptive error when the matching key is missing. When adding a new AI provider, follow the same pattern:
 
-1. Lazy singleton client.
-2. Strongly-typed request/response interfaces exported alongside the function.
-3. Robust JSON extraction — models often wrap output in ```json fences. See `extractJsonArray` in `musicService.ts` and the regex strip in `claudeAgentService.ts`.
-4. Errors logged with the raw response, then re-thrown with a user-friendly message.
+1. **Resolve keys via `apiKeyManager.getApiKey('<provider>')`** — never read `process.env` directly. The manager unifies vault-stored keys + env fallback and emits a `markKeyUsed` ping for the UI.
+2. Lazy singleton client; rebuild the client when the resolved key changes.
+3. Strongly-typed request/response interfaces exported alongside the function.
+4. Robust JSON extraction — models often wrap output in ```json fences. See `extractJsonArray` in `musicService.ts` and the regex strip in `claudeAgentService.ts` / `nvidiaService.ts`.
+5. Record cost via `usageTracker.recordUsage({ provider, model, feature, inputTokens, outputTokens })` after every completion.
+6. Errors logged with the raw response, then re-thrown with a user-friendly message.
 
 ### Claude SDK usage
 
 `claudeAgentService.ts` uses `@anthropic-ai/sdk` directly from the browser with `dangerouslyAllowBrowser: true`. The default model is `claude-sonnet-4-6`. The DJ skill registry (`DJ_SKILLS`) is the single place to add or modify Claude personas; each skill owns its system prompt and expected JSON schema.
 
 When upgrading Claude models, refer to model IDs documented in this repo's environment notes — current defaults: Opus 4.7 (`claude-opus-4-7`), Sonnet 4.6 (`claude-sonnet-4-6`), Haiku 4.5 (`claude-haiku-4-5-20251001`).
+
+### NVIDIA NIM usage
+
+`nvidiaService.ts` calls the OpenAI-compatible endpoint at
+`https://integrate.api.nvidia.com/v1/chat/completions` directly via `fetch` (no SDK dependency). The default model is `meta/llama-3.1-70b-instruct`. Use `runNvidiaChat({ model, messages })` for raw text or `runNvidiaJson({ ... })` for JSON-mode-style helpers. Add new model pricing entries to `MODEL_PRICING` in `usageTracker.ts` when you wire up additional NVIDIA models.
 
 ### 3D / Three.js
 
