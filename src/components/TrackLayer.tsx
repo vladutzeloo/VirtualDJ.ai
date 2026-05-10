@@ -18,6 +18,8 @@ interface TrackLayerProps {
   title: string;
   track?: TrackData;
   onPlayToggle?: () => void;
+  onNext?: () => void;
+  onRestart?: () => void;
   currentTime?: number;
   totalSeconds?: number;
 }
@@ -29,7 +31,7 @@ const formatTime = (sec: number) => {
   return `${m.toString().padStart(2, '0')}:${s}`;
 };
 
-export const TrackLayer = ({ title, track, onPlayToggle, currentTime = 0, totalSeconds = 0 }: TrackLayerProps) => {
+export const TrackLayer = ({ title, track, onPlayToggle, onNext, onRestart, currentTime = 0, totalSeconds = 0 }: TrackLayerProps) => {
   const hasRealTime = totalSeconds > 0;
   const progressPct = hasRealTime ? Math.min(100, (currentTime / totalSeconds) * 100) : 0;
   return (
@@ -89,16 +91,26 @@ export const TrackLayer = ({ title, track, onPlayToggle, currentTime = 0, totalS
           </div>
           
           <div className="flex items-center gap-3">
-            <button className="p-2 rounded-full hover:bg-white/10 transition-colors text-slate-400 hover:text-white">
+            <button
+              onClick={onRestart}
+              disabled={!onRestart}
+              aria-label="Restart track"
+              className="p-2 rounded-full hover:bg-white/10 transition-colors text-slate-400 hover:text-white disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-slate-400 disabled:cursor-not-allowed"
+            >
               <Rewind className="w-5 h-5 fill-current" />
             </button>
-            <button 
+            <button
               onClick={onPlayToggle}
               className="w-12 h-12 rounded-full glass bg-jarvis-accent-cyan/20 border-jarvis-accent-cyan/40 flex items-center justify-center hover:scale-105 active:scale-95 transition-all text-jarvis-accent-cyan shadow-[0_0_15px_rgba(0,242,255,0.3)]"
             >
               {track.isPlaying ? <Pause className="w-6 h-6 fill-current" /> : <Play className="w-6 h-6 fill-current ml-1" />}
             </button>
-            <button className="p-2 rounded-full hover:bg-white/10 transition-colors text-slate-400 hover:text-white">
+            <button
+              onClick={onNext}
+              disabled={!onNext}
+              aria-label="Next track"
+              className="p-2 rounded-full hover:bg-white/10 transition-colors text-slate-400 hover:text-white disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-slate-400 disabled:cursor-not-allowed"
+            >
               <FastForward className="w-5 h-5 fill-current" />
             </button>
           </div>
