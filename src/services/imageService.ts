@@ -24,7 +24,7 @@ export const generateTrackArtwork = async (title: string, artist: string, genre:
     No text, just the abstract visual representation of the sound.`;
 
     const response = await ai.models.generateContent({
-      model: 'gemini-3.1-flash-image-preview',
+      model: 'gemini-2.5-flash-image',
       contents: {
         parts: [
           {
@@ -62,7 +62,7 @@ export const generateAgentAvatar = async (agentName: string, role: string): Prom
     Professional character design, 8k resolution, cinematic focus.`;
 
     const response = await ai.models.generateContent({
-      model: 'gemini-3.1-flash-image-preview',
+      model: 'gemini-2.5-flash-image',
       contents: {
         parts: [{ text: prompt }],
       },
