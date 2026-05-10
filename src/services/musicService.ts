@@ -1,4 +1,4 @@
-import { GoogleGenAI, Type } from "@google/genai";
+import { GoogleGenAI } from "@google/genai";
 
 let aiInstance: GoogleGenAI | null = null;
 
@@ -13,6 +13,11 @@ function getAI() {
   return aiInstance;
 }
 
+export interface GroundingSource {
+  uri: string;
+  title: string;
+}
+
 export interface TrackRecommendation {
   title: string;
   artist: string;
@@ -25,6 +30,40 @@ export interface TrackRecommendation {
   imageUrl?: string;
   isLiked?: boolean;
   notes?: string;
+  sources?: GroundingSource[];
+}
+
+const RECOMMENDATION_PROMPT = (genrePreference: string) => `You are a DJ-curation agent with live web access. Use Google Search to find REAL, currently-released ${genrePreference} tracks (prefer the last 24 months when possible). Verify titles, artists and release dates against the web.
+
+For each of 5 tracks, assign a specialized AI Agent persona (e.g. "Bass Enhancer", "Vocal Refiner", "Harmonic Sync", "Sync Master", "Ambient Soul").
+
+Return ONLY a single JSON array (no prose, no markdown fences) of 5 objects with this exact shape:
+[
+  {
+    "title": string,
+    "artist": string,
+    "genre": string,
+    "agentLabel": string,
+    "confidence": number between 0 and 1,
+    "tags": string[],
+    "releaseDate": string (YYYY or YYYY-MM-DD),
+    "previewUrl": string (a real youtube.com or soundcloud.com URL for the track if you can find one, otherwise a plausible search URL)
+  }
+]`;
+
+function extractJsonArray(raw: string): unknown {
+  const fenced = raw.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  const candidate = (fenced ? fenced[1] : raw).trim();
+  try {
+    return JSON.parse(candidate);
+  } catch {
+    const start = candidate.indexOf("[");
+    const end = candidate.lastIndexOf("]");
+    if (start !== -1 && end !== -1 && end > start) {
+      return JSON.parse(candidate.slice(start, end + 1));
+    }
+    throw new Error("Model did not return parseable JSON");
+  }
 }
 
 export const getTrackRecommendations = async (genrePreference: string): Promise<TrackRecommendation[]> => {
@@ -32,33 +71,36 @@ export const getTrackRecommendations = async (genrePreference: string): Promise<
     const ai = getAI();
     const response = await ai.models.generateContent({
       model: "gemini-3-flash-preview",
-      contents: `Recommend 5 ${genrePreference} tracks for a DJ set. For each track, assign a specialized AI Agent (like 'Bass Enhancer', 'Vocal Refiner', 'Harmonic Sync'). 
-      Include a release date and a mock preview URL (soundcloud or youtube format).`,
+      contents: RECOMMENDATION_PROMPT(genrePreference),
       config: {
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.ARRAY,
-          items: {
-            type: Type.OBJECT,
-            properties: {
-              title: { type: Type.STRING },
-              artist: { type: Type.STRING },
-              genre: { type: Type.STRING },
-              agentLabel: { type: Type.STRING, description: "The AI Agent persona assigned to this track type" },
-              confidence: { type: Type.NUMBER },
-              tags: { type: Type.ARRAY, items: { type: Type.STRING } },
-              releaseDate: { type: Type.STRING },
-              previewUrl: { type: Type.STRING }
-            },
-            required: ["title", "artist", "genre", "agentLabel", "releaseDate", "previewUrl"]
-          }
-        }
-      }
+        tools: [{ googleSearch: {} }],
+      },
     });
 
     const text = response.text;
     if (!text) return [];
-    return JSON.parse(text);
+
+    const parsed = extractJsonArray(text);
+    if (!Array.isArray(parsed)) return [];
+
+    const groundingChunks =
+      response.candidates?.[0]?.groundingMetadata?.groundingChunks ?? [];
+    const sources: GroundingSource[] = groundingChunks
+      .map((c: any) => c?.web)
+      .filter((w: any) => w?.uri)
+      .map((w: any) => ({ uri: w.uri as string, title: (w.title as string) ?? w.uri }));
+
+    return parsed.map((rec: any) => ({
+      title: String(rec.title ?? ""),
+      artist: String(rec.artist ?? ""),
+      genre: String(rec.genre ?? genrePreference),
+      agentLabel: String(rec.agentLabel ?? "AUTO-CURATOR"),
+      confidence: typeof rec.confidence === "number" ? rec.confidence : 0.85,
+      tags: Array.isArray(rec.tags) ? rec.tags.map(String) : [],
+      releaseDate: String(rec.releaseDate ?? ""),
+      previewUrl: String(rec.previewUrl ?? ""),
+      sources,
+    }));
   } catch (error) {
     console.error("Gemini Error:", error);
     return [];

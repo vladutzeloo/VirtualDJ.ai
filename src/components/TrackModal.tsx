@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from "motion/react";
-import { X, ExternalLink, Calendar, Music, Bot } from "lucide-react";
+import { X, ExternalLink, Calendar, Music, Bot, Globe } from "lucide-react";
 import { TrackRecommendation } from "../services/musicService";
 
 interface TrackModalProps {
@@ -86,6 +86,28 @@ export const TrackModal = ({ track, onClose, onAdd }: TrackModalProps) => {
               </span>
             ))}
           </div>
+
+          {track.sources && track.sources.length > 0 && (
+            <div className="mb-8">
+              <span className="text-[10px] font-mono text-slate-500 uppercase tracking-[0.2em] mb-2 flex items-center gap-1.5">
+                <Globe className="w-3 h-3" /> Web Sources
+              </span>
+              <div className="flex flex-col gap-1.5">
+                {track.sources.slice(0, 5).map(s => (
+                  <a
+                    key={s.uri}
+                    href={s.uri}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-[10px] font-mono text-jarvis-accent-cyan/80 hover:text-jarvis-accent-cyan truncate flex items-center gap-1.5"
+                  >
+                    <ExternalLink className="w-3 h-3 shrink-0" />
+                    <span className="truncate">{s.title}</span>
+                  </a>
+                ))}
+              </div>
+            </div>
+          )}
 
           <div className="flex gap-4">
             <a 
