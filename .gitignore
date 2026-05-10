@@ -6,3 +6,6 @@ coverage/
 *.log
 .env*
 !.env.example
+
+# Capacitor Android project — generated in CI from capacitor.config.ts.
+android/
