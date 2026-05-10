@@ -1,4 +1,5 @@
 import { hasApiKey } from './apiKeyManager';
+import { getPreferredModel } from './modelCatalog';
 import { recordUsage } from './usageTracker';
 import { getAnthropicClient } from './anthropicClient';
 import { extractJsonObject } from '../utils/jsonExtract';
@@ -44,19 +45,20 @@ export interface SkillRunOptions {
 export const runDjSkill = async <T = unknown>({
   skillId,
   userPrompt,
-  model = 'claude-sonnet-4-6',
+  model,
   maxTokens = 1024,
   agentBriefing,
 }: SkillRunOptions): Promise<T> => {
   const skill = DJ_SKILLS[skillId];
   if (!skill) throw new Error(`Unknown DJ skill: ${skillId}`);
+  const resolvedModel = model ?? getPreferredModel('anthropic');
 
   const client = getAnthropicClient();
   const system = agentBriefing
     ? `${skill.systemPrompt}\n\nThe user has rated other AI agent personas. Lean toward TRUSTED personas' style, avoid the AVOID personas' patterns:\n\n${agentBriefing}`
     : skill.systemPrompt;
   const response = await client.messages.create({
-    model,
+    model: resolvedModel,
     max_tokens: maxTokens,
     system,
     messages: [{ role: 'user', content: userPrompt }],
@@ -64,7 +66,7 @@ export const runDjSkill = async <T = unknown>({
 
   recordUsage({
     provider: 'anthropic',
-    model,
+    model: resolvedModel,
     feature: `claude:${String(skillId)}`,
     inputTokens: response.usage?.input_tokens ?? 0,
     outputTokens: response.usage?.output_tokens ?? 0,

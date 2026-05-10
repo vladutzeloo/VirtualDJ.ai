@@ -26,6 +26,10 @@ import {
   Send,
   Power,
   PowerOff,
+  Brain,
+  Check,
+  Gauge,
+  PlayCircle,
 } from 'lucide-react';
 import {
   authenticateBiometric,
@@ -68,6 +72,20 @@ import {
   subscribeWebhooks,
   testWebhook,
 } from '../services/webhookService';
+import {
+  ModelEntry,
+  getModelsForProvider,
+  getPreferredModel,
+  setPreferredModel,
+  subscribeModelPrefs,
+} from '../services/modelCatalog';
+import {
+  CheckResult,
+  checkProvider,
+  getAllCheckResults,
+  subscribeCheckResults,
+} from '../services/modelChecker';
+import { lookupPricing } from '../services/usageTracker';
 
 interface VaultProps {
   isOpen: boolean;
@@ -75,7 +93,7 @@ interface VaultProps {
   theme: 'dark' | 'light';
 }
 
-type Tab = 'keys' | 'import' | 'usage' | 'webhooks';
+type Tab = 'keys' | 'models' | 'import' | 'usage' | 'webhooks';
 
 export const Vault = ({ isOpen, onClose, theme }: VaultProps) => {
   const [isUnlocked, setIsUnlocked] = useState(false);
@@ -218,6 +236,7 @@ export const Vault = ({ isOpen, onClose, theme }: VaultProps) => {
             <Tabs theme={theme} tab={tab} setTab={setTab} />
             <div className="flex-1 overflow-y-auto custom-scrollbar p-6">
               {tab === 'keys' && <KeysPanel theme={theme} keys={keys} />}
+              {tab === 'models' && <ModelsPanel theme={theme} keys={keys} />}
               {tab === 'import' && <ImportPanel theme={theme} />}
               {tab === 'usage' && <UsagePanel theme={theme} usage={usage} />}
               {tab === 'webhooks' && (
@@ -401,17 +420,18 @@ const BannerStat = ({
 const Tabs = ({ theme, tab, setTab }: { theme: 'dark' | 'light'; tab: Tab; setTab: (t: Tab) => void }) => {
   const items: { id: Tab; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
     { id: 'keys', label: 'Keys', icon: Key },
+    { id: 'models', label: 'Models', icon: Brain },
     { id: 'import', label: 'Import', icon: Upload },
     { id: 'usage', label: 'Usage', icon: Activity },
     { id: 'webhooks', label: 'Hooks', icon: Webhook },
   ];
   return (
-    <div className={`flex border-b px-4 ${theme === 'dark' ? 'border-white/5' : 'border-slate-100'}`}>
+    <div className={`flex border-b px-2 overflow-x-auto custom-scrollbar ${theme === 'dark' ? 'border-white/5' : 'border-slate-100'}`}>
       {items.map(item => (
         <button
           key={item.id}
           onClick={() => setTab(item.id)}
-          className={`flex items-center gap-2 px-4 py-3 text-[10px] font-mono font-black uppercase tracking-[0.2em] transition-all border-b-2 ${
+          className={`flex items-center gap-1.5 px-3 py-3 text-[10px] font-mono font-black uppercase tracking-[0.18em] transition-all border-b-2 shrink-0 ${
             tab === item.id
               ? 'border-jarvis-accent-cyan text-jarvis-accent-cyan'
               : 'border-transparent text-slate-500 hover:text-slate-300'
@@ -1145,6 +1165,254 @@ const WebhookRow = ({
         </p>
       )}
     </div>
+  );
+};
+
+// ─── Models panel (LLM checker + selector) ───────────────────────────────
+
+const PROVIDER_ORDER: ProviderId[] = ['anthropic', 'gemini', 'nvidia', 'kimi', 'openai'];
+
+const ModelsPanel = ({ theme, keys }: { theme: 'dark' | 'light'; keys: KeyPreview[] }) => {
+  const [results, setResults] = useState<Partial<Record<ProviderId, CheckResult>>>(
+    () => getAllCheckResults(),
+  );
+  const [busy, setBusy] = useState<ProviderId | 'all' | null>(null);
+  const [, force] = useState(0);
+
+  useEffect(() => {
+    const unsubResults = subscribeCheckResults(() => setResults(getAllCheckResults()));
+    const unsubPrefs = subscribeModelPrefs(() => force(n => n + 1));
+    return () => {
+      unsubResults();
+      unsubPrefs();
+    };
+  }, []);
+
+  const keyByProvider = useMemo(() => {
+    const map: Partial<Record<ProviderId, KeyPreview>> = {};
+    keys.forEach(k => {
+      map[k.provider] = k;
+    });
+    return map;
+  }, [keys]);
+
+  const onCheck = async (provider: ProviderId) => {
+    setBusy(provider);
+    try {
+      await checkProvider(provider);
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const onCheckAll = async () => {
+    const configured = PROVIDER_ORDER.filter(p => keyByProvider[p]?.source !== 'missing');
+    if (configured.length === 0) return;
+    setBusy('all');
+    try {
+      await Promise.all(configured.map(p => checkProvider(p)));
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const configuredCount = PROVIDER_ORDER.filter(p => keyByProvider[p]?.source !== 'missing').length;
+
+  return (
+    <div className="space-y-3">
+      <div className={`rounded-2xl border p-4 flex items-center justify-between gap-3 ${
+        theme === 'dark' ? 'bg-white/[0.03] border-white/10' : 'bg-slate-50 border-slate-200'
+      }`}>
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <Brain className="w-4 h-4 text-jarvis-accent-cyan" />
+            <span className="text-xs font-display font-black uppercase tracking-widest text-white">
+              LLM Checker
+            </span>
+          </div>
+          <p className="text-[10px] font-mono text-slate-500 mt-1">
+            Send a tiny live ping to each configured provider with the selected model.
+            {' '}Records latency, cost, and any errors.
+          </p>
+        </div>
+        <button
+          onClick={onCheckAll}
+          disabled={busy !== null || configuredCount === 0}
+          className="px-3 py-2 rounded-lg bg-jarvis-accent-cyan text-jarvis-bg font-mono font-black text-[10px] uppercase tracking-widest disabled:opacity-30 active:scale-95 transition flex items-center gap-1.5 shrink-0"
+        >
+          <PlayCircle className={`w-3.5 h-3.5 ${busy === 'all' ? 'animate-pulse' : ''}`} />
+          {busy === 'all' ? 'Checking…' : 'Check All'}
+        </button>
+      </div>
+
+      {PROVIDER_ORDER.map(provider => (
+        <ProviderModelsCard
+          key={provider}
+          theme={theme}
+          provider={provider}
+          preview={keyByProvider[provider]}
+          result={results[provider]}
+          busy={busy === provider}
+          onCheck={() => onCheck(provider)}
+        />
+      ))}
+    </div>
+  );
+};
+
+interface ProviderModelsCardProps {
+  theme: 'dark' | 'light';
+  provider: ProviderId;
+  preview?: KeyPreview;
+  result?: CheckResult;
+  busy: boolean;
+  onCheck: () => void;
+}
+
+const ProviderModelsCard = ({
+  theme,
+  provider,
+  preview,
+  result,
+  busy,
+  onCheck,
+}: ProviderModelsCardProps) => {
+  const meta = PROVIDERS[provider];
+  const models = getModelsForProvider(provider);
+  const selected = getPreferredModel(provider);
+  const hasKey = preview && preview.source !== 'missing';
+
+  const statusLabel = !result
+    ? 'Untested'
+    : result.ok
+      ? `${result.latencyMs}ms`
+      : 'Failed';
+  const statusColor = !result
+    ? 'text-slate-500 border-white/10 bg-white/5'
+    : result.ok
+      ? 'text-emerald-400 border-emerald-500/30 bg-emerald-500/10'
+      : 'text-red-400 border-red-500/30 bg-red-500/10';
+
+  return (
+    <div className={`rounded-2xl border p-4 ${
+      theme === 'dark' ? 'bg-white/[0.03] border-white/10' : 'bg-slate-50 border-slate-200'
+    }`}>
+      <div className="flex items-start justify-between gap-3 flex-wrap">
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className={`text-sm font-display font-black tracking-tight ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>
+              {meta.name}
+            </span>
+            <span className={`text-[8px] font-mono font-black uppercase tracking-widest px-2 py-0.5 rounded-full border ${statusColor}`}>
+              {result?.ok ? <Check className="w-2.5 h-2.5 inline mr-0.5" /> : null}
+              {statusLabel}
+            </span>
+            {!hasKey && (
+              <span className="text-[8px] font-mono font-black uppercase tracking-widest px-2 py-0.5 rounded-full border text-amber-400 border-amber-500/30 bg-amber-500/10">
+                No key
+              </span>
+            )}
+          </div>
+          {result?.timestamp && (
+            <p className="text-[9px] font-mono text-slate-600 mt-0.5">
+              Last check {timeAgo(result.timestamp)}
+              {result.ok && result.sample ? ` · "${result.sample}"` : ''}
+            </p>
+          )}
+          {result && !result.ok && result.error && (
+            <p className="text-[9px] font-mono text-red-400/80 mt-0.5 truncate">
+              <AlertCircle className="w-2.5 h-2.5 inline mr-1" />
+              {result.error}
+            </p>
+          )}
+        </div>
+        <button
+          onClick={onCheck}
+          disabled={busy || !hasKey}
+          className="px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-[10px] font-mono font-black uppercase tracking-widest text-white hover:bg-white/10 disabled:opacity-30 active:scale-95 transition flex items-center gap-1.5 shrink-0"
+          title={hasKey ? 'Run live ping' : 'Add a key to enable checks'}
+        >
+          <Gauge className={`w-3.5 h-3.5 ${busy ? 'animate-pulse' : ''}`} />
+          {busy ? 'Pinging…' : 'Check'}
+        </button>
+      </div>
+
+      <div className="mt-3 space-y-1.5">
+        {models.map(model => (
+          <ModelRow
+            key={model.id}
+            model={model}
+            selected={model.id === selected}
+            theme={theme}
+            onSelect={() => setPreferredModel(provider, model.id)}
+          />
+        ))}
+      </div>
+    </div>
+  );
+};
+
+interface ModelRowProps {
+  model: ModelEntry;
+  selected: boolean;
+  theme: 'dark' | 'light';
+  onSelect: () => void;
+}
+
+const ModelRow = ({ model, selected, theme, onSelect }: ModelRowProps) => {
+  const pricing = lookupPricing(model.provider, model.id);
+  const contextLabel =
+    model.contextWindow >= 1_000_000
+      ? `${(model.contextWindow / 1_000_000).toFixed(model.contextWindow % 1_000_000 === 0 ? 0 : 1)}M ctx`
+      : `${Math.round(model.contextWindow / 1000)}k ctx`;
+
+  return (
+    <button
+      onClick={onSelect}
+      className={`w-full text-left rounded-xl border px-3 py-2 transition-all flex items-start gap-3 ${
+        selected
+          ? 'border-jarvis-accent-cyan/60 bg-jarvis-accent-cyan/5'
+          : theme === 'dark'
+            ? 'border-white/5 bg-white/[0.02] hover:bg-white/[0.05]'
+            : 'border-slate-200 bg-white hover:bg-slate-50'
+      }`}
+    >
+      <div className={`mt-0.5 w-3.5 h-3.5 rounded-full border flex items-center justify-center shrink-0 ${
+        selected
+          ? 'border-jarvis-accent-cyan bg-jarvis-accent-cyan/20'
+          : 'border-white/20'
+      }`}>
+        {selected && <div className="w-1.5 h-1.5 rounded-full bg-jarvis-accent-cyan" />}
+      </div>
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className={`text-xs font-display font-black tracking-tight ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>
+            {model.label}
+          </span>
+          {model.default && (
+            <span className="text-[8px] font-mono font-black uppercase tracking-widest px-1.5 py-0.5 rounded-full border text-emerald-400 border-emerald-500/30 bg-emerald-500/10">
+              Default
+            </span>
+          )}
+          {model.capabilities.slice(0, 3).map(cap => (
+            <span
+              key={cap}
+              className="text-[8px] font-mono uppercase tracking-widest text-slate-500 border border-white/10 bg-white/5 rounded-full px-1.5 py-0.5"
+            >
+              {cap}
+            </span>
+          ))}
+        </div>
+        <p className="text-[10px] font-mono text-slate-500 mt-0.5 truncate">{model.description}</p>
+        <p className="text-[9px] font-mono text-slate-600 mt-0.5">
+          <span className="text-slate-400">{model.id}</span>
+          {' · '}
+          {contextLabel}
+          {' · '}
+          ${pricing.inputPerMTok.toFixed(2)} in / ${pricing.outputPerMTok.toFixed(2)} out per 1M
+        </p>
+      </div>
+    </button>
   );
 };
 

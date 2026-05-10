@@ -1,4 +1,5 @@
 import type { TrackRecommendation } from './musicService';
+import { getPreferredModel } from './modelCatalog';
 import { recordUsage } from './usageTracker';
 import { getAnthropicClient } from './anthropicClient';
 import { extractJsonObject } from '../utils/jsonExtract';
@@ -46,7 +47,7 @@ const buildUserPayload = (entries: FeedbackEntry[]): string => {
 
 export const analyzePreferences = async (
   feedback: FeedbackEntry[],
-  model = 'claude-sonnet-4-6',
+  model?: string,
   agentBriefing?: string,
 ): Promise<TasteProfile> => {
   if (feedback.length === 0) {
@@ -60,12 +61,13 @@ export const analyzePreferences = async (
     };
   }
 
+  const resolvedModel = model ?? getPreferredModel('anthropic');
   const client = getAnthropicClient();
   const system = agentBriefing
     ? `${SYSTEM_PROMPT}\n\nThe user has also rated the AI agent personas themselves. Weight TRUSTED personas' previous picks more heavily and discount AVOID personas when summarising taste.\n\n${agentBriefing}`
     : SYSTEM_PROMPT;
   const response = await client.messages.create({
-    model,
+    model: resolvedModel,
     max_tokens: 1024,
     system,
     messages: [{ role: 'user', content: buildUserPayload(feedback) }],
@@ -73,7 +75,7 @@ export const analyzePreferences = async (
 
   recordUsage({
     provider: 'anthropic',
-    model,
+    model: resolvedModel,
     feature: 'claude:preference-agent',
     inputTokens: response.usage?.input_tokens ?? 0,
     outputTokens: response.usage?.output_tokens ?? 0,
