@@ -1,17 +1,22 @@
 import Anthropic from '@anthropic-ai/sdk';
+import { getApiKey, hasApiKey, markKeyUsed } from './apiKeyManager';
+import { recordUsage } from './usageTracker';
 
 let clientInstance: Anthropic | null = null;
+let clientInstanceKey: string | null = null;
 
 const getClient = (): Anthropic => {
-  if (!clientInstance) {
-    const apiKey = process.env.ANTHROPIC_API_KEY;
-    if (!apiKey) {
-      throw new Error(
-        'ANTHROPIC_API_KEY is not set. Add it to your environment to enable the Claude DJ agent.',
-      );
-    }
-    clientInstance = new Anthropic({ apiKey, dangerouslyAllowBrowser: true });
+  const apiKey = getApiKey('anthropic');
+  if (!apiKey) {
+    throw new Error(
+      'ANTHROPIC_API_KEY is not set. Add it via the Neural Vault or your environment.',
+    );
   }
+  if (!clientInstance || clientInstanceKey !== apiKey) {
+    clientInstance = new Anthropic({ apiKey, dangerouslyAllowBrowser: true });
+    clientInstanceKey = apiKey;
+  }
+  markKeyUsed('anthropic');
   return clientInstance;
 };
 
@@ -69,6 +74,14 @@ export const runDjSkill = async <T = unknown>({
     messages: [{ role: 'user', content: userPrompt }],
   });
 
+  recordUsage({
+    provider: 'anthropic',
+    model,
+    feature: `claude:${String(skillId)}`,
+    inputTokens: response.usage?.input_tokens ?? 0,
+    outputTokens: response.usage?.output_tokens ?? 0,
+  });
+
   const textBlock = response.content.find((b) => b.type === 'text');
   const raw = textBlock && 'text' in textBlock ? textBlock.text.trim() : '';
   const cleaned = raw.replace(/^```(?:json)?\s*|\s*```$/g, '');
@@ -80,6 +93,4 @@ export const runDjSkill = async <T = unknown>({
   }
 };
 
-export const isClaudeConfigured = (): boolean => {
-  return Boolean(process.env.ANTHROPIC_API_KEY);
-};
+export const isClaudeConfigured = (): boolean => hasApiKey('anthropic');
