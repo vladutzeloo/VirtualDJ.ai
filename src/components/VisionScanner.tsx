@@ -3,6 +3,10 @@ import Webcam from 'react-webcam';
 import { Camera, RefreshCw, Sparkles, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { GoogleGenAI } from "@google/genai";
+import {
+  recognizeFromVideo,
+  mapGestureToAction,
+} from '../services/gestureService';
 
 let aiInstance: GoogleGenAI | null = null;
 
@@ -32,50 +36,60 @@ export const VisionScanner = ({ onScanResult, onGesture, onClose }: VisionScanne
   const capture = useCallback(async () => {
     if (!webcamRef.current) return;
     setScanning(true);
-    
+
     try {
+      if (gestureMode) {
+        const video = webcamRef.current.video as HTMLVideoElement | null;
+        if (!video) throw new Error('Webcam video element unavailable');
+        const detections = await recognizeFromVideo(video);
+        const top = detections
+          .filter((d) => d.category && d.category !== 'None')
+          .sort((a, b) => b.score - a.score)[0];
+
+        if (top) {
+          const action = mapGestureToAction(top.category) ?? top.category;
+          onGesture?.(action);
+          setResult(
+            `GESTURE: ${action.toUpperCase()} (${Math.round(top.score * 100)}%)`,
+          );
+        } else {
+          setResult('NO GESTURE DETECTED');
+        }
+        return;
+      }
+
       const imageSrc = webcamRef.current.getScreenshot();
-      if (!imageSrc) throw new Error("Could not capture image");
+      if (!imageSrc) throw new Error('Could not capture image');
 
       const base64Data = imageSrc.split(',')[1];
       const ai = getAI();
-      
-      const prompt = gestureMode 
-        ? "Analyze this image for hand gestures. Is there a 'fist' (Stop/Pause), 'open hand' (Play/Next), or 'pointing up' (Volume Up)? Reply ONLY with the detected gesture or 'none'."
-        : "Analyze this image. What is the setting? (e.g., Gym, Office, Party, Nature). Suggest a music genre and 3 mood tags for this environment. Format: Setting | Genre | tag1, tag2, tag3";
-      
+
+      const prompt =
+        'Analyze this image. What is the setting? (e.g., Gym, Office, Party, Nature). Suggest a music genre and 3 mood tags for this environment. Format: Setting | Genre | tag1, tag2, tag3';
+
       const generation = await ai.models.generateContent({
-        model: "gemini-3-flash-preview",
+        model: 'gemini-3-flash-preview',
         contents: {
           parts: [
             { text: prompt },
             {
               inlineData: {
                 data: base64Data,
-                mimeType: "image/jpeg"
-              }
-            }
-          ]
-        }
+                mimeType: 'image/jpeg',
+              },
+            },
+          ],
+        },
       });
 
       const text = generation.text?.trim();
       if (text) {
-        if (gestureMode) {
-          if (onGesture && text.toLowerCase() !== 'none') {
-            onGesture(text);
-            setResult(`GESTURE: ${text.toUpperCase()}`);
-          } else {
-            setResult("NO GESTURE DETECTED");
-          }
-        } else {
-          setResult(text);
-          onScanResult(text);
-        }
+        setResult(text);
+        onScanResult(text);
       }
     } catch (error) {
-      console.error("Vision Analysis Error:", error);
-      setResult("ERROR: Neural link failed. Manual override required.");
+      console.error('Vision Analysis Error:', error);
+      setResult('ERROR: Neural link failed. Manual override required.');
     } finally {
       setScanning(false);
     }
@@ -107,7 +121,7 @@ export const VisionScanner = ({ onScanResult, onGesture, onClose }: VisionScanne
            
            <div className="flex flex-col gap-1 px-3 py-2 bg-black/40 backdrop-blur-sm border-l-2 border-jarvis-accent-cyan/50 rounded-r-lg">
               <span className="text-[8px] font-mono text-slate-400">LATENCY: <span className="text-jarvis-accent-cyan">18MS</span></span>
-              <span className="text-[8px] font-mono text-slate-400">MODEL: <span className="text-jarvis-accent-pink">GEMINI-SCAN-V3</span></span>
+              <span className="text-[8px] font-mono text-slate-400">MODEL: <span className="text-jarvis-accent-pink">{gestureMode ? 'MEDIAPIPE-HAND-V1' : 'GEMINI-SCAN-V3'}</span></span>
            </div>
         </div>
         <button 

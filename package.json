@@ -11,9 +11,12 @@
     "lint": "tsc --noEmit"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.95.1",
     "@google/genai": "^1.29.0",
+    "@mediapipe/tasks-vision": "^0.10.35",
     "@react-three/drei": "^10.7.7",
     "@react-three/fiber": "^9.6.1",
+    "@simplewebauthn/browser": "^13.3.0",
     "@tailwindcss/vite": "^4.1.14",
     "@types/three": "^0.184.1",
     "@vitejs/plugin-react": "^5.0.4",
