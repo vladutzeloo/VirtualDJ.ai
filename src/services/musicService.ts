@@ -2,6 +2,8 @@ import { GoogleGenAI } from "@google/genai";
 import { searchAudiusTracks, type AudiusTrack } from "./audiusService";
 import { getApiKey, markKeyUsed } from "./apiKeyManager";
 import { recordUsage } from "./usageTracker";
+import { canonicalizePersona } from "./agentPersonas";
+import { extractJsonArray } from "../utils/jsonExtract";
 
 let aiInstance: GoogleGenAI | null = null;
 let aiInstanceKey: string | null = null;
@@ -66,7 +68,7 @@ const RECOMMENDATION_PROMPT = (
   weatherContext?: string,
 ) => `You are a DJ-curation agent with live web access. Use Google Search to find REAL, currently-released ${genrePreference} tracks (prefer the last 24 months when possible). Verify titles, artists and release dates against the web.
 
-For each of 5 tracks, assign a specialized AI Agent persona (e.g. "Bass Enhancer", "Vocal Refiner", "Harmonic Sync", "Sync Master", "Ambient Soul").
+For each of 5 tracks, assign a specialized AI Agent persona. Pick from this canonical roster (use the exact spelling, Title Case): "Bass Enhancer", "Vocal Refiner", "Harmonic Sync", "Sync Master", "Ambient Soul", "Rhythm Refiner", "Distortion Core", "Groove Archivist".
 ${agentBriefing ? `\nBefore deciding which agent persona to assign, read the user's persona reputation briefing below and prefer agents the user has TRUSTED. Avoid reusing personas the user has flagged AVOID.\n\n${agentBriefing}\n` : ''}${weatherContext ? `\nAmbient context: it is currently ${weatherContext}. Lean the energy, mood and tempo of your picks into this vibe — sunny daytime calls for brighter, higher-energy tracks; rainy or night conditions favour moodier, slower, more atmospheric picks.\n` : ''}
 
 Return ONLY a single JSON array (no prose, no markdown fences) of 5 objects with this exact shape:
@@ -83,21 +85,6 @@ Return ONLY a single JSON array (no prose, no markdown fences) of 5 objects with
   }
 ]`;
 
-function extractJsonArray(raw: string): unknown {
-  const fenced = raw.match(/```(?:json)?\s*([\s\S]*?)```/i);
-  const candidate = (fenced ? fenced[1] : raw).trim();
-  try {
-    return JSON.parse(candidate);
-  } catch {
-    const start = candidate.indexOf("[");
-    const end = candidate.lastIndexOf("]");
-    if (start !== -1 && end !== -1 && end > start) {
-      return JSON.parse(candidate.slice(start, end + 1));
-    }
-    throw new Error("Model did not return parseable JSON");
-  }
-}
-
 export const getTrackRecommendations = async (
   genrePreference: string,
   agentBriefing?: string,
@@ -105,16 +92,16 @@ export const getTrackRecommendations = async (
 ): Promise<TrackRecommendation[]> => {
   try {
     const ai = getAI();
+    const promptText = RECOMMENDATION_PROMPT(genrePreference, agentBriefing, weatherContext);
     const response = await ai.models.generateContent({
       model: "gemini-3-flash-preview",
-      contents: RECOMMENDATION_PROMPT(genrePreference, agentBriefing, weatherContext),
+      contents: promptText,
       config: {
         tools: [{ googleSearch: {} }],
       },
     });
 
     const text = response.text;
-    const promptText = RECOMMENDATION_PROMPT(genrePreference, agentBriefing, weatherContext);
     const reported = usageMetadataTokens(response);
     recordUsage({
       provider: 'gemini',
@@ -143,7 +130,7 @@ export const getTrackRecommendations = async (
         title,
         artist,
         genre: String(rec.genre ?? genrePreference),
-        agentLabel: String(rec.agentLabel ?? "AUTO-CURATOR"),
+        agentLabel: canonicalizePersona(String(rec.agentLabel ?? "Auto-Curator")),
         confidence: typeof rec.confidence === "number" ? rec.confidence : 0.85,
         tags: Array.isArray(rec.tags) ? rec.tags.map(String) : [],
         releaseDate: String(rec.releaseDate ?? ""),
@@ -159,23 +146,24 @@ export const getTrackRecommendations = async (
 };
 
 const AGENT_BY_GENRE: Array<{ match: RegExp; label: string }> = [
-  { match: /bass|dnb|drum/i, label: 'BASS ENHANCER' },
-  { match: /house|tech|techno/i, label: 'SYNC MASTER' },
-  { match: /hip[\s-]?hop|rap|trap/i, label: 'RHYTHM REFINER' },
-  { match: /ambient|chill|lofi|lo-fi/i, label: 'AMBIENT SOUL' },
-  { match: /vocal|pop|r&b|rnb/i, label: 'VOCAL REFINER' },
-  { match: /electronic|edm|synth/i, label: 'HARMONIC SYNC' },
-  { match: /rock|metal|punk/i, label: 'DISTORTION CORE' },
-  { match: /jazz|funk|soul/i, label: 'GROOVE ARCHIVIST' },
+  { match: /bass|dnb|drum/i, label: 'Bass Enhancer' },
+  { match: /house|tech|techno/i, label: 'Sync Master' },
+  { match: /hip[\s-]?hop|rap|trap/i, label: 'Rhythm Refiner' },
+  { match: /ambient|chill|lofi|lo-fi/i, label: 'Ambient Soul' },
+  { match: /vocal|pop|r&b|rnb/i, label: 'Vocal Refiner' },
+  { match: /electronic|edm|synth/i, label: 'Harmonic Sync' },
+  { match: /rock|metal|punk/i, label: 'Distortion Core' },
+  { match: /jazz|funk|soul/i, label: 'Groove Archivist' },
 ];
+
+const FALLBACK_ROTATION = ['Auto-Curator', 'Neural Scout', 'Crate Digger', 'Waveform Sage'];
 
 function pickAgentLabel(track: AudiusTrack, fallbackIndex: number): string {
   const haystack = `${track.genre} ${track.tags.join(' ')}`;
   for (const { match, label } of AGENT_BY_GENRE) {
     if (match.test(haystack)) return label;
   }
-  const rotation = ['AUTO-CURATOR', 'NEURAL SCOUT', 'CRATE DIGGER', 'WAVEFORM SAGE'];
-  return rotation[fallbackIndex % rotation.length];
+  return FALLBACK_ROTATION[fallbackIndex % FALLBACK_ROTATION.length];
 }
 
 function audiusToRecommendation(track: AudiusTrack, index: number, queryGenre: string): TrackRecommendation {

@@ -1,24 +1,7 @@
-import Anthropic from '@anthropic-ai/sdk';
-import { getApiKey, hasApiKey, markKeyUsed } from './apiKeyManager';
+import { hasApiKey } from './apiKeyManager';
 import { recordUsage } from './usageTracker';
-
-let clientInstance: Anthropic | null = null;
-let clientInstanceKey: string | null = null;
-
-const getClient = (): Anthropic => {
-  const apiKey = getApiKey('anthropic');
-  if (!apiKey) {
-    throw new Error(
-      'ANTHROPIC_API_KEY is not set. Add it via the Neural Vault or your environment.',
-    );
-  }
-  if (!clientInstance || clientInstanceKey !== apiKey) {
-    clientInstance = new Anthropic({ apiKey, dangerouslyAllowBrowser: true });
-    clientInstanceKey = apiKey;
-  }
-  markKeyUsed('anthropic');
-  return clientInstance;
-};
+import { getAnthropicClient } from './anthropicClient';
+import { extractJsonObject } from '../utils/jsonExtract';
 
 export interface DjSkill {
   name: string;
@@ -68,7 +51,7 @@ export const runDjSkill = async <T = unknown>({
   const skill = DJ_SKILLS[skillId];
   if (!skill) throw new Error(`Unknown DJ skill: ${skillId}`);
 
-  const client = getClient();
+  const client = getAnthropicClient();
   const system = agentBriefing
     ? `${skill.systemPrompt}\n\nThe user has rated other AI agent personas. Lean toward TRUSTED personas' style, avoid the AVOID personas' patterns:\n\n${agentBriefing}`
     : skill.systemPrompt;
@@ -89,9 +72,8 @@ export const runDjSkill = async <T = unknown>({
 
   const textBlock = response.content.find((b) => b.type === 'text');
   const raw = textBlock && 'text' in textBlock ? textBlock.text.trim() : '';
-  const cleaned = raw.replace(/^```(?:json)?\s*|\s*```$/g, '');
   try {
-    return JSON.parse(cleaned) as T;
+    return extractJsonObject(raw) as T;
   } catch (err) {
     console.error('Claude DJ skill parse error. Raw response:', raw, err);
     throw new Error('The Claude DJ agent returned an invalid response format.');

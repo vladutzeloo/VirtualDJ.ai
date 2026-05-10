@@ -2,10 +2,25 @@ import React from 'react';
 import { motion } from 'motion/react';
 import { Bot, Zap, Activity, Music, Sparkles, Shield, Cpu } from 'lucide-react';
 import { getAgentImage } from '../constants/agentImages';
+import { PERSONA_GENRE_SEED, type AgentPersona } from '../services/agentPersonas';
 
-const AGENTS_LIST = [
+interface ShowcaseAgent {
+  name: AgentPersona;
+  role: string;
+  description: string;
+  icon: React.ReactElement;
+  color: string;
+  accent: string;
+  bg: string;
+  border: string;
+  rarity: 'HOLO' | 'LEGENDARY' | 'RARE' | 'COMMON';
+  power: number;
+  skills: string[];
+}
+
+const AGENTS_LIST: ShowcaseAgent[] = [
   {
-    name: 'Bass Architect',
+    name: 'Bass Enhancer',
     role: 'Low-Frequency Optimization',
     description: 'Specializes in structural bass integrity and sub-harmonic enhancement. Ideal for Techno, Trap, and D&B.',
     icon: <Cpu className="w-5 h-5" />,
@@ -31,7 +46,7 @@ const AGENTS_LIST = [
     skills: ['AI-VOICE', 'SILK', 'BREATH']
   },
   {
-    name: 'Techno Weaver',
+    name: 'Sync Master',
     role: 'Rhythmic Complexity',
     description: 'Weaves intricate polyrhythms and high-energy percussion loops into the existing sonic fabric.',
     icon: <Zap className="w-5 h-5" />,
@@ -57,9 +72,9 @@ const AGENTS_LIST = [
     skills: ['PAD-GEN', 'REVERB']
   },
   {
-    name: 'Sync Master',
-    role: 'Temporal Alignment',
-    description: 'Ensures absolute phase coherence and BPM alignment across all neural layers.',
+    name: 'Harmonic Sync',
+    role: 'Phase & Key Coherence',
+    description: 'Ensures absolute phase coherence and key compatibility across all neural layers.',
     icon: <Shield className="w-5 h-5" />,
     color: 'blue',
     accent: 'text-blue-400',
@@ -70,9 +85,9 @@ const AGENTS_LIST = [
     skills: ['PHASE-LOCK', 'SYNC']
   },
   {
-    name: 'Melody Scaper',
-    role: 'Harmonic Intelligence',
-    description: 'Analyzes key signatures and suggests melodic counters to the primary lead instrument.',
+    name: 'Groove Archivist',
+    role: 'Funk & Soul Intelligence',
+    description: 'Surfaces dusty grooves and analog-era cuts. Finds the pocket your set has been missing.',
     icon: <Music className="w-5 h-5" />,
     color: 'pink',
     accent: 'text-pink-400',
@@ -84,7 +99,11 @@ const AGENTS_LIST = [
   }
 ];
 
-export const AgentShowcase = () => {
+interface AgentShowcaseProps {
+  onDeploy?: (persona: AgentPersona, genreSeed: string) => void;
+}
+
+export const AgentShowcase = ({ onDeploy }: AgentShowcaseProps = {}) => {
   return (
     <div className="p-4 sm:p-8 flex flex-col gap-10">
       <div>
@@ -184,10 +203,14 @@ export const AgentShowcase = () => {
                   <span className="text-[7px] font-mono text-slate-600 uppercase">MODEL ENGINE</span>
                   <span className="text-[9px] font-mono text-slate-400 font-black">NEURAL-MIXER-X2</span>
                </div>
-               <button className={`px-5 py-2.5 rounded-2xl text-[10px] font-mono font-black uppercase tracking-widest transition-all shadow-xl active:scale-95 ${
-                 agent.rarity === 'HOLO' ? 'bg-white text-black hover:bg-slate-200' :
-                 `bg-vdj-surface-2/70 border border-vdj-border text-white hover:border-${agent.color}-500/50 hover:text-${agent.accent.replace('text-', '')}`
-               }`}>
+               <button
+                 onClick={() => onDeploy?.(agent.name, PERSONA_GENRE_SEED[agent.name])}
+                 disabled={!onDeploy}
+                 className={`px-5 py-2.5 rounded-2xl text-[10px] font-mono font-black uppercase tracking-widest transition-all shadow-xl active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed ${
+                   agent.rarity === 'HOLO' ? 'bg-white text-black hover:bg-slate-200' :
+                   `bg-vdj-surface-2/70 border border-vdj-border text-white hover:border-${agent.color}-500/50 hover:text-${agent.accent.replace('text-', '')}`
+                 }`}
+               >
                  DEPLOY AGENT
                </button>
             </div>

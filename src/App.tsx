@@ -57,11 +57,13 @@ import { DJShop } from './components/DJShop';
 import { DEFAULT_SKIN_ID, DJSkin, findSkin } from './data/djSkins';
 import {
   AgentReputations,
-  blankRep,
+  appendNote,
   formatAgentBriefing,
   loadReputations,
   persistReputations,
+  upsertRep,
 } from './services/agentReputationService';
+import { canonicalizePersona } from './services/agentPersonas';
 import { AgentRanker } from './components/AgentRanker';
 
 import { Logo } from './components/Logo';
@@ -197,25 +199,25 @@ export default function App() {
     event: AgentEvent,
     note?: string,
   ) => {
-    if (!agentLabel) return;
+    const canonical = canonicalizePersona(agentLabel);
+    if (!canonical) return;
     setAgentReputations(prev => {
-      const current = prev[agentLabel] ?? blankRep(agentLabel);
-      const next = { ...current, lastFeedbackAt: Date.now() };
-      if (event === 'trackLike') {
-        next.trackLikes += 1;
-        next.bonusCreditsEarned += AGENT_LIKE_BONUS;
-      } else if (event === 'trackDislike') {
-        next.trackDislikes += 1;
-      } else if (event === 'upvote') {
-        next.upvotes += 1;
-      } else {
-        next.downvotes += 1;
-      }
-      const trimmedNote = note?.trim();
-      if (trimmedNote) {
-        next.notes = [...current.notes, trimmedNote.slice(0, 140)].slice(-12);
-      }
-      return { ...prev, [agentLabel]: next };
+      const { next } = upsertRep(prev, canonical, current => {
+        let updated = { ...current, lastFeedbackAt: Date.now() };
+        if (event === 'trackLike') {
+          updated.trackLikes += 1;
+          updated.bonusCreditsEarned += AGENT_LIKE_BONUS;
+        } else if (event === 'trackDislike') {
+          updated.trackDislikes += 1;
+        } else if (event === 'upvote') {
+          updated.upvotes += 1;
+        } else {
+          updated.downvotes += 1;
+        }
+        if (note) updated = appendNote(updated, note);
+        return updated;
+      });
+      return next;
     });
   };
 
@@ -351,6 +353,11 @@ export default function App() {
       return;
     }
 
+    // Capture prior state so re-liking (after a clear) doesn't double-award
+    // credits or inflate the agent's reputation counters.
+    const wasLiked = prefs.liked.some(t => t.id === rec.id);
+    const wasDisliked = prefs.disliked.some(t => t.id === rec.id);
+
     const updated: TrackRecommendation = {
       ...rec,
       isLiked: verdict === 'like',
@@ -360,23 +367,25 @@ export default function App() {
     if (verdict === 'like') {
       removePref('disliked', rec.id);
       upsertPref('liked', updated);
-      onLikeIncrement();
-      if (rec.agentLabel) {
-        recordAgentFeedback(rec.agentLabel, 'trackLike', reason);
-        awardCredits(AGENT_LIKE_BONUS);
-        addLog(
-          rec.agentLabel,
-          `+${AGENT_LIKE_BONUS} bonus credits — agent's pick "${rec.title}" was liked.`,
-          'success',
-        );
-        notify({
-          title: `${rec.agentLabel} earned you ${AGENT_LIKE_BONUS} credits`,
-          message: `For finding "${rec.title}".`,
-          type: 'success',
-          agent: rec.agentLabel,
-          sound: 'like',
-          duration: 2400,
-        });
+      if (!wasLiked) {
+        onLikeIncrement();
+        if (rec.agentLabel) {
+          recordAgentFeedback(rec.agentLabel, 'trackLike', reason);
+          awardCredits(AGENT_LIKE_BONUS);
+          addLog(
+            rec.agentLabel,
+            `+${AGENT_LIKE_BONUS} bonus credits — agent's pick "${rec.title}" was liked.`,
+            'success',
+          );
+          notify({
+            title: `${rec.agentLabel} earned you ${AGENT_LIKE_BONUS} credits`,
+            message: `For finding "${rec.title}".`,
+            type: 'success',
+            agent: rec.agentLabel,
+            sound: 'like',
+            duration: 2400,
+          });
+        }
       }
       addLog('TASTE-AGENT', `Liked "${rec.title}". Updating taste profile.`, 'success');
       dispatchWebhook('track.liked', {
@@ -389,7 +398,7 @@ export default function App() {
     } else {
       removePref('liked', rec.id);
       upsertPref('disliked', updated);
-      if (rec.agentLabel) {
+      if (!wasDisliked && rec.agentLabel) {
         recordAgentFeedback(rec.agentLabel, 'trackDislike', reason);
         addLog(
           rec.agentLabel,
@@ -1049,6 +1058,7 @@ export default function App() {
           fetchSuggestions(seed);
         }}
         theme={theme}
+        agentBriefing={formatAgentBriefing(agentReputations)}
       />
 
       <AnimatePresence>
@@ -1749,7 +1759,13 @@ function AppContent({
         {/* Main Content Area */}
         <section className={`flex-1 flex flex-col overflow-y-auto custom-scrollbar ${isMobile ? 'p-4 gap-4' : 'p-6 gap-6'} pb-20`}>
           {activeTab === 'AGENTS' ? (
-            <AgentShowcase />
+            <AgentShowcase
+              onDeploy={(_persona, genreSeed) => {
+                setSearchQuery(genreSeed);
+                fetchSuggestions(genreSeed);
+                setActiveTab('RADIO');
+              }}
+            />
           ) : activeTab === 'SIGNALS' ? (
             <SocialPickups onAdd={(track) => addTrack({ ...track, agentLabel: 'SOCIAL-BOT', genre: track.tags[0], confidence: 1 })} />
           ) : activeTab === 'CRATE' ? (

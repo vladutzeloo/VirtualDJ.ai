@@ -1,3 +1,5 @@
+import { canonicalizePersona } from './agentPersonas';
+
 export interface AgentRep {
   agentLabel: string;
   upvotes: number;
@@ -14,7 +16,7 @@ export type AgentReputations = Record<string, AgentRep>;
 export const REPUTATION_STORAGE_KEY = 'vdj.agentReps.v1';
 
 export const blankRep = (agentLabel: string): AgentRep => ({
-  agentLabel,
+  agentLabel: canonicalizePersona(agentLabel),
   upvotes: 0,
   downvotes: 0,
   trackLikes: 0,
@@ -23,6 +25,39 @@ export const blankRep = (agentLabel: string): AgentRep => ({
   lastFeedbackAt: 0,
   notes: [],
 });
+
+const NOTE_MAX_LEN = 140;
+const NOTES_PER_AGENT = 12;
+
+/** User-supplied notes flow into AI system prompts via `formatAgentBriefing`,
+ *  so collapse newlines, strip code fences, and cap length to limit prompt
+ *  injection surface. */
+export const sanitizeNote = (note: string): string =>
+  note
+    .replace(/```/g, '')
+    .replace(/[\r\n\t]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, NOTE_MAX_LEN);
+
+/** Canonicalize the label and merge it into the existing rep map, returning a
+ *  new map and the canonical key the caller should reference. */
+export const upsertRep = (
+  reps: AgentReputations,
+  rawLabel: string,
+  patch: (current: AgentRep) => AgentRep,
+): { next: AgentReputations; key: string } => {
+  const key = canonicalizePersona(rawLabel);
+  if (!key) return { next: reps, key };
+  const current = reps[key] ?? blankRep(key);
+  return { next: { ...reps, [key]: patch({ ...current, agentLabel: key }) }, key };
+};
+
+export const appendNote = (rep: AgentRep, note: string): AgentRep => {
+  const cleaned = sanitizeNote(note);
+  if (!cleaned) return rep;
+  return { ...rep, notes: [...rep.notes, cleaned].slice(-NOTES_PER_AGENT) };
+};
 
 export const trustScore = (rep: AgentRep): number => {
   const positive = rep.upvotes * 1 + rep.trackLikes * 1.5;
@@ -88,16 +123,33 @@ export const loadReputations = (): AgentReputations => {
     for (const key of Object.keys(parsed)) {
       const v = parsed[key];
       if (!v || typeof v !== 'object') continue;
-      out[key] = {
-        agentLabel: String(v.agentLabel ?? key),
+      const canonical = canonicalizePersona(String(v.agentLabel ?? key));
+      if (!canonical) continue;
+      const incoming: AgentRep = {
+        agentLabel: canonical,
         upvotes: Number(v.upvotes) || 0,
         downvotes: Number(v.downvotes) || 0,
         trackLikes: Number(v.trackLikes) || 0,
         trackDislikes: Number(v.trackDislikes) || 0,
         bonusCreditsEarned: Number(v.bonusCreditsEarned) || 0,
         lastFeedbackAt: Number(v.lastFeedbackAt) || 0,
-        notes: Array.isArray(v.notes) ? v.notes.map(String).slice(-12) : [],
+        notes: Array.isArray(v.notes)
+          ? v.notes.map((n: unknown) => sanitizeNote(String(n))).filter(Boolean).slice(-NOTES_PER_AGENT)
+          : [],
       };
+      const existing = out[canonical];
+      out[canonical] = existing
+        ? {
+            agentLabel: canonical,
+            upvotes: existing.upvotes + incoming.upvotes,
+            downvotes: existing.downvotes + incoming.downvotes,
+            trackLikes: existing.trackLikes + incoming.trackLikes,
+            trackDislikes: existing.trackDislikes + incoming.trackDislikes,
+            bonusCreditsEarned: existing.bonusCreditsEarned + incoming.bonusCreditsEarned,
+            lastFeedbackAt: Math.max(existing.lastFeedbackAt, incoming.lastFeedbackAt),
+            notes: [...existing.notes, ...incoming.notes].slice(-NOTES_PER_AGENT),
+          }
+        : incoming;
     }
     return out;
   } catch {
