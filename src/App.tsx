@@ -30,7 +30,8 @@ import {
   Sun,
   Smartphone,
   ShoppingBag,
-  Coins
+  Coins,
+  Sparkles
 } from "lucide-react";
 import { StatItem } from './components/StatItem';
 import { MixerKnob } from './components/MixerKnob';
@@ -1639,20 +1640,27 @@ function AppContent({
                   ))}
                 </div>
                 <div className="relative">
-                  <input 
-                    type="text" 
+                  <input
+                    type="text"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    className="w-full bg-slate-900/50 border border-jarvis-border rounded-lg px-2 py-1.5 text-[10px] font-mono text-jarvis-accent-cyan focus:outline-none focus:border-jarvis-accent-cyan/60"
+                    onKeyDown={(e) => { if (e.key === 'Enter' && searchQuery.trim()) fetchSuggestions(searchQuery.trim()); }}
+                    placeholder='e.g. "deep dnb like Spor", "uplifting techno 128bpm"'
+                    className="w-full bg-slate-900/50 border border-jarvis-border rounded-lg pl-2 pr-7 py-1.5 text-[10px] font-mono text-jarvis-accent-cyan placeholder:text-slate-600 focus:outline-none focus:border-jarvis-accent-cyan/60"
                   />
                   <Search className="absolute right-2 top-1.5 w-3 h-3 text-slate-500" />
                 </div>
-                <button 
-                   onClick={() => fetchSuggestions(searchQuery)}
-                   className="w-full mt-2 py-1.5 rounded-lg bg-jarvis-accent-cyan/20 border border-jarvis-accent-cyan/30 text-[10px] font-mono font-bold text-jarvis-accent-cyan hover:bg-jarvis-accent-cyan/30 transition-all uppercase tracking-widest"
+                <button
+                   onClick={() => searchQuery.trim() && fetchSuggestions(searchQuery.trim())}
+                   disabled={loadingSuggestions || !searchQuery.trim()}
+                   className="w-full mt-2 py-1.5 rounded-lg bg-jarvis-accent-cyan/20 border border-jarvis-accent-cyan/30 text-[10px] font-mono font-bold text-jarvis-accent-cyan hover:bg-jarvis-accent-cyan/30 disabled:opacity-50 disabled:hover:bg-jarvis-accent-cyan/20 transition-all uppercase tracking-widest flex items-center justify-center gap-1.5"
                 >
-                  Find Matching
+                  <Sparkles className="w-3 h-3" />
+                  {loadingSuggestions ? 'Searching…' : 'Search with AI'}
                 </button>
+                <p className="mt-1.5 text-[8px] font-mono text-slate-500 leading-snug">
+                  Powered by Gemini · Google Search · Audius
+                </p>
              </div>
           </div>
 
@@ -1745,11 +1753,11 @@ function AppContent({
                </div>
                
                <div className="grid grid-cols-3 gap-6 px-4">
-                  <MixerKnob label="GAIN" value={mixerValues.volume} />
-                  <MixerKnob label="TEMPO" value={mixerValues.tempo} unit="BPM" />
-                  <MixerKnob label="BASS" value={mixerValues.bass} color="pink" />
-                  <MixerKnob label="MID" value={mixerValues.mid} />
-                  <MixerKnob label="TREB" value={mixerValues.treble} />
+                  <MixerKnob label="GAIN" value={mixerValues.volume} onChange={(v) => setMixerValues((prev: any) => ({ ...prev, volume: v }))} />
+                  <MixerKnob label="TEMPO" value={mixerValues.tempo} unit="BPM" min={60} max={200} onChange={(v) => setMixerValues((prev: any) => ({ ...prev, tempo: v }))} />
+                  <MixerKnob label="BASS" value={mixerValues.bass} color="pink" onChange={(v) => setMixerValues((prev: any) => ({ ...prev, bass: v }))} />
+                  <MixerKnob label="MID" value={mixerValues.mid} onChange={(v) => setMixerValues((prev: any) => ({ ...prev, mid: v }))} />
+                  <MixerKnob label="TREB" value={mixerValues.treble} onChange={(v) => setMixerValues((prev: any) => ({ ...prev, treble: v }))} />
                </div>
 
                <div className="flex flex-col gap-4 px-6 mt-6">
@@ -1796,6 +1804,56 @@ function AppContent({
             </div>
           ) : (
             <>
+              {/* AI Search hero — shown on mobile/tablet (sidebar search is desktop-only) */}
+              <div className="lg:hidden flex flex-col gap-2 p-4 rounded-2xl glass bg-gradient-to-br from-jarvis-accent-cyan/10 via-jarvis-card/60 to-jarvis-accent-pink/5 border border-jarvis-accent-cyan/30">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Sparkles className="w-4 h-4 text-jarvis-accent-cyan" />
+                    <h2 className="text-[11px] font-display font-black uppercase tracking-[0.25em] text-white">
+                      Search with AI
+                    </h2>
+                  </div>
+                  <div className="flex gap-1">
+                    {['GLOBAL', 'LOCAL'].map((mode) => (
+                      <button
+                        key={mode}
+                        onClick={() => setSearchMode(mode as any)}
+                        className={`px-2 py-0.5 rounded-full text-[8px] font-mono font-bold uppercase tracking-widest border transition-all ${
+                          searchMode === mode
+                            ? 'bg-jarvis-accent-cyan/20 border-jarvis-accent-cyan text-jarvis-accent-cyan'
+                            : 'bg-slate-900 border-slate-800 text-slate-500'
+                        }`}
+                      >
+                        {mode}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && searchQuery.trim()) fetchSuggestions(searchQuery.trim());
+                    }}
+                    placeholder='Ask the AI: "deep house for sunset", "spor dnb"…'
+                    className="w-full bg-slate-900/70 border border-jarvis-border rounded-xl pl-3 pr-10 py-2.5 text-xs font-mono text-jarvis-accent-cyan placeholder:text-slate-600 focus:outline-none focus:border-jarvis-accent-cyan/60"
+                  />
+                  <button
+                    onClick={() => searchQuery.trim() && fetchSuggestions(searchQuery.trim())}
+                    disabled={loadingSuggestions || !searchQuery.trim()}
+                    aria-label="Search with AI"
+                    className="absolute right-1.5 top-1/2 -translate-y-1/2 w-7 h-7 rounded-lg bg-jarvis-accent-cyan/20 border border-jarvis-accent-cyan/40 text-jarvis-accent-cyan hover:bg-jarvis-accent-cyan/30 disabled:opacity-50 transition-all flex items-center justify-center"
+                  >
+                    <Search className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+                <p className="text-[9px] font-mono text-slate-500 leading-snug">
+                  {loadingSuggestions ? 'Scanning the deep grid…' : 'Powered by Gemini · Google Search · Audius'}
+                </p>
+              </div>
+
               <Turntable3D isPlaying={tracks.some((t: any) => t.isPlaying)} skin={equippedSkin} />
 
               {/* Top Mix Area */}
@@ -1814,11 +1872,11 @@ function AppContent({
                 </div>
                 
                 <div className="flex justify-around items-end gap-2">
-                   <MixerKnob label="VOL" value={mixerValues.volume} />
-                   <MixerKnob label="BPM" value={mixerValues.tempo} unit="BPM" />
-                   <MixerKnob label="BASS" value={mixerValues.bass} color="pink" />
-                   <MixerKnob label="MID" value={mixerValues.mid} />
-                   <MixerKnob label="TREB" value={mixerValues.treble} />
+                   <MixerKnob label="VOL" value={mixerValues.volume} onChange={(v) => setMixerValues((prev: any) => ({ ...prev, volume: v }))} />
+                   <MixerKnob label="BPM" value={mixerValues.tempo} unit="BPM" min={60} max={200} onChange={(v) => setMixerValues((prev: any) => ({ ...prev, tempo: v }))} />
+                   <MixerKnob label="BASS" value={mixerValues.bass} color="pink" onChange={(v) => setMixerValues((prev: any) => ({ ...prev, bass: v }))} />
+                   <MixerKnob label="MID" value={mixerValues.mid} onChange={(v) => setMixerValues((prev: any) => ({ ...prev, mid: v }))} />
+                   <MixerKnob label="TREB" value={mixerValues.treble} onChange={(v) => setMixerValues((prev: any) => ({ ...prev, treble: v }))} />
                    
                    <div className="hidden lg:flex flex-col items-center gap-2 ml-4">
                       <div className="flex flex-col gap-1 h-32 w-1 bg-slate-800/50 rounded-full relative">
@@ -1864,24 +1922,88 @@ function AppContent({
           </div>
 
           <div className="flex flex-col gap-4 h-full">
-                <div className="flex items-center justify-between">
-                   <h2 className="text-sm font-display font-bold uppercase tracking-[0.2em] text-white">UP NEXT</h2>
-                   <button className="text-[10px] font-mono text-jarvis-accent-cyan hover:underline flex items-center gap-1 uppercase tracking-tighter">
-                     View All <ChevronRight className="w-3 h-3" />
-                   </button>
-                </div>
-                <div className="flex flex-col gap-2">
-                   {tracks.map((track, i) => (
-                     <TrackLayer
-                       key={track.id}
-                       title={`Layer ${String.fromCharCode(65 + i)}`}
-                       track={track}
-                       onPlayToggle={() => togglePlay(track.id)}
-                       currentTime={playback.id === track.id ? playback.currentTime : 0}
-                       totalSeconds={playback.id === track.id ? playback.duration : 0}
-                     />
-                   ))}
-                </div>
+                {(() => {
+                  const playingIdx = tracks.findIndex((t: TrackData) => t.isPlaying);
+                  const playingTrack: TrackData | undefined = playingIdx >= 0 ? tracks[playingIdx] : undefined;
+                  const queue = tracks.filter((_: TrackData, i: number) => i !== playingIdx);
+                  return (
+                    <>
+                      <div className="flex items-center justify-between">
+                         <div className="flex items-center gap-2">
+                           <span className={`w-1.5 h-1.5 rounded-full ${playingTrack ? 'bg-emerald-400 animate-pulse shadow-[0_0_8px_var(--color-emerald-400)]' : 'bg-slate-600'}`} />
+                           <h2 className="text-sm font-display font-bold uppercase tracking-[0.2em] text-white">NOW PLAYING</h2>
+                         </div>
+                         <span className="text-[9px] font-mono uppercase tracking-widest text-slate-500">
+                           {playingTrack ? 'LIVE' : 'IDLE'}
+                         </span>
+                      </div>
+                      {playingTrack ? (
+                        <TrackLayer
+                          key={playingTrack.id}
+                          title={`Layer ${String.fromCharCode(65 + playingIdx)}`}
+                          track={playingTrack}
+                          onPlayToggle={() => togglePlay(playingTrack.id)}
+                          currentTime={playback.id === playingTrack.id ? playback.currentTime : 0}
+                          totalSeconds={playback.id === playingTrack.id ? playback.duration : 0}
+                        />
+                      ) : (
+                        <div className="p-4 glass rounded-xl bg-jarvis-card flex items-center justify-between gap-3 border border-jarvis-border/40">
+                          <div className="flex items-center gap-3 min-w-0">
+                            <div className="w-12 h-12 rounded-lg bg-slate-900 border border-jarvis-border/60 flex items-center justify-center text-slate-600">
+                              <Music className="w-5 h-5" />
+                            </div>
+                            <div className="min-w-0">
+                              <p className="text-xs font-display font-bold text-slate-400 uppercase tracking-widest">Nothing playing</p>
+                              <p className="text-[10px] font-mono text-slate-600 truncate">
+                                {queue[0] ? `Tap play on "${queue[0].title}"` : 'Search the AI agent below to load tracks.'}
+                              </p>
+                            </div>
+                          </div>
+                          {queue[0] && (
+                            <button
+                              onClick={() => togglePlay(queue[0].id)}
+                              className="px-3 py-1.5 rounded-full bg-jarvis-accent-cyan/20 border border-jarvis-accent-cyan/40 text-[10px] font-mono font-bold text-jarvis-accent-cyan hover:bg-jarvis-accent-cyan/30 transition-all uppercase tracking-widest shrink-0"
+                            >
+                              ▶ Play
+                            </button>
+                          )}
+                        </div>
+                      )}
+
+                      <div className="flex items-center justify-between mt-2">
+                         <div className="flex items-center gap-2">
+                           <h2 className="text-sm font-display font-bold uppercase tracking-[0.2em] text-white">UP NEXT</h2>
+                           <span className="text-[9px] font-mono text-slate-500">{queue.length}</span>
+                         </div>
+                         <button className="text-[10px] font-mono text-jarvis-accent-cyan hover:underline flex items-center gap-1 uppercase tracking-tighter">
+                           View All <ChevronRight className="w-3 h-3" />
+                         </button>
+                      </div>
+                      <div className="flex flex-col gap-2">
+                         {queue.length === 0 && !playingTrack && (
+                           <div className="text-[10px] font-mono text-slate-600 italic px-2 py-3">
+                             Queue is empty — use the search panel to load tracks.
+                           </div>
+                         )}
+                         {queue.length === 0 && playingTrack && (
+                           <div className="text-[10px] font-mono text-slate-600 italic px-2 py-3">
+                             No upcoming layers — add another track from suggestions.
+                           </div>
+                         )}
+                         {queue.map((track: TrackData) => (
+                           <TrackLayer
+                             key={track.id}
+                             title={`Layer ${String.fromCharCode(65 + tracks.indexOf(track))}`}
+                             track={track}
+                             onPlayToggle={() => togglePlay(track.id)}
+                             currentTime={playback.id === track.id ? playback.currentTime : 0}
+                             totalSeconds={playback.id === track.id ? playback.duration : 0}
+                           />
+                         ))}
+                      </div>
+                    </>
+                  );
+                })()}
              </div>
           </div>
 
