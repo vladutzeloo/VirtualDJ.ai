@@ -48,6 +48,9 @@ import { Vault } from './components/Vault';
 import { Logo } from './components/Logo';
 import { DeviceIdentity } from './components/DeviceIdentity';
 import { useDeviceTelemetry } from './hooks/useDeviceTelemetry';
+import { useAppFeedback } from './hooks/useAppFeedback';
+import { NotificationCenter } from './components/NotificationCenter';
+import { BellOff, Volume1, VolumeX } from 'lucide-react';
 
 const STATIONS = [
   { id: 'sw', label: 'Synthwave', sub: 'SYNTHWAVE', color: 'bg-pink-600/20 text-pink-400 border-pink-500/30' },
@@ -67,6 +70,7 @@ interface LogEntry {
 }
 
 export default function App() {
+  const { notify, playSound } = useAppFeedback();
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
   const [activeTab, setActiveTab] = useState('RADIO');
   const [isVaultOpen, setIsVaultOpen] = useState(false);
@@ -137,11 +141,26 @@ export default function App() {
   const fetchSuggestions = async (query: string) => {
     setLoadingSuggestions(true);
     setUsage(prev => ({ ...prev, searchesRun: prev.searchesRun + 1 }));
-    addLog(searchMode === 'GLOBAL' ? 'DIGGER' : 'LOCAL-BOT', `Scanning ${searchMode.toLowerCase()} archives for ${query}...`, 'info');
+    const agent = searchMode === 'GLOBAL' ? 'DIGGER' : 'LOCAL-BOT';
+    addLog(agent, `Scanning ${searchMode.toLowerCase()} archives for ${query}...`, 'info');
+    notify({
+      title: `Scanning ${searchMode.toLowerCase()} archives`,
+      message: `"${query}"`,
+      type: 'info',
+      agent,
+      sound: 'scan',
+      duration: 2200,
+    });
     const recs = await getTrackRecommendations(`${query}${searchMode === 'LOCAL' ? ' (local recording style)' : ''}`);
     setSuggestions(recs);
     setLoadingSuggestions(false);
     addLog('ANALYST', `Processed ${recs.length} candidates. Pattern matching rank confirmed.`, 'success');
+    notify({
+      title: `${recs.length} matches found`,
+      message: 'Neural curation complete.',
+      type: 'success',
+      agent: 'ANALYST',
+    });
 
     // Background image generation using Gemini 3.1 Flash Image (Banana 2)
     recs.forEach(async (rec, index) => {
@@ -179,10 +198,19 @@ export default function App() {
   const togglePlay = (id: string) => {
     const track = tracks.find(t => t.id === id);
     if (!track) return;
+    const willPlay = !track.isPlaying;
     addLog(track.agentLabel, `${track.isPlaying ? 'Paused' : 'Playing'} track: ${track.title}`, track.isPlaying ? 'info' : 'success');
-    if (!track.isPlaying) {
+    if (willPlay) {
       setUsage(prev => ({ ...prev, tracksPlayed: prev.tracksPlayed + 1 }));
     }
+    notify({
+      title: willPlay ? 'Now playing' : 'Paused',
+      message: `${track.title} — ${track.artist}`,
+      type: willPlay ? 'success' : 'info',
+      agent: track.agentLabel,
+      sound: willPlay ? 'play' : 'pause',
+      duration: 2400,
+    });
     setTracks(prev => prev.map(t => t.id === id ? { ...t, isPlaying: !t.isPlaying } : t));
   };
 
@@ -190,7 +218,15 @@ export default function App() {
     addLog('JULES', `Deploying agent "${rec.agentLabel}" to new track: ${rec.title}${notes ? ' (with neural notes)' : ''}`, 'info');
     setUsage(prev => ({ ...prev, agentsDeployed: prev.agentsDeployed + 1 }));
     setIsDeploying(true);
-    
+    notify({
+      title: `Deploying ${rec.agentLabel}`,
+      message: rec.title,
+      type: 'info',
+      agent: 'JULES',
+      sound: 'deploy',
+      duration: 2400,
+    });
+
     // Simulate planning state
     setTimeout(() => {
       const newTrack: TrackData = {
@@ -206,13 +242,27 @@ export default function App() {
       setIsDeploying(false);
       if (notes) addLog(rec.agentLabel, `Notes integration: ${notes.slice(0, 50)}...`, 'success');
       addLog(rec.agentLabel, `Track successfully integrated into the mix.`, 'success');
+      notify({
+        title: 'Track integrated',
+        message: `${rec.title} added to the mix.`,
+        type: 'success',
+        agent: rec.agentLabel,
+      });
     }, 1500);
   };
 
   const handleFileUpload = (files: FileList | null) => {
-    if (!files) return;
+    if (!files || files.length === 0) return;
     addLog('SYSTEM', `Analyzing ${files.length} uploaded files...`, 'info');
-    
+    notify({
+      title: `Importing ${files.length} file${files.length === 1 ? '' : 's'}`,
+      message: 'Analyzing local audio assets…',
+      type: 'info',
+      agent: 'UPLOADER',
+      sound: 'scan',
+      duration: 1800,
+    });
+
     Array.from(files).forEach(file => {
       const newLocalTrack: TrackData = {
         id: Math.random().toString(36).substr(2, 9),
@@ -225,6 +275,12 @@ export default function App() {
       };
       setLocalTracks(prev => [newLocalTrack, ...prev]);
       addLog('UPLOADER', `Track "${file.name}" imported to local library.`, 'success');
+    });
+    notify({
+      title: 'Library updated',
+      message: `${files.length} track${files.length === 1 ? '' : 's'} imported.`,
+      type: 'success',
+      agent: 'UPLOADER',
     });
   };
 
@@ -242,14 +298,23 @@ export default function App() {
   const handleGesture = (gesture: string) => {
     const g = gesture.toLowerCase();
     addLog('NEURAL-LINK', `Gesture detected: ${g.toUpperCase()}`, 'success');
-    
+    notify({
+      title: `Gesture: ${gesture}`,
+      type: 'info',
+      agent: 'NEURAL-LINK',
+      sound: 'notify',
+      duration: 1800,
+    });
+
     if (g.includes('fist')) {
        setTracks(prev => prev.map(t => ({ ...t, isPlaying: false })));
        addLog('SYSTEM', 'Emergency Stop: Global pause initiated.', 'warn');
+       notify({ title: 'Emergency stop', message: 'All layers paused.', type: 'warn', agent: 'SYSTEM', sound: 'pause' });
     } else if (g.includes('open hand')) {
        if (tracks.length > 0) {
          setTracks(prev => prev.map((t, i) => i === 0 ? { ...t, isPlaying: true } : t));
          addLog('SYSTEM', 'Neural Play: Layer A engaged.', 'success');
+         notify({ title: 'Layer A engaged', type: 'success', agent: 'SYSTEM', sound: 'play' });
        }
     } else if (g.includes('pointing')) {
        setMixerValues(prev => ({ ...prev, volume: Math.min(100, prev.volume + 10) }));
@@ -260,6 +325,7 @@ export default function App() {
     } else if (g.includes('thumbs up')) {
        setTracks(prev => prev.map(t => t.isPlaying ? { ...t, liked: true } : t));
        addLog('SYSTEM', 'Neural Like: Track added to favorites.', 'success');
+       playSound('like');
     }
   };
 
@@ -318,7 +384,17 @@ export default function App() {
             setSuggestions={setSuggestions}
             onGesture={handleGesture}
             onFileUpload={handleFileUpload}
-            onLike={() => setUsage(prev => ({ ...prev, tracksLiked: prev.tracksLiked + 1 }))}
+            onLike={(track?: TrackRecommendation) => {
+              setUsage(prev => ({ ...prev, tracksLiked: prev.tracksLiked + 1 }));
+              notify({
+                title: 'Added to favorites',
+                message: track?.title ? `${track.title} — ${track.artist}` : undefined,
+                type: 'success',
+                agent: track?.agentLabel ?? 'CURATOR',
+                sound: 'like',
+                duration: 2000,
+              });
+            }}
             telemetry={telemetry}
             onOpenDeviceIdentity={() => setIsDeviceIdentityOpen(true)}
             isMobile={true}
@@ -346,6 +422,8 @@ export default function App() {
           />
         )}
       </AnimatePresence>
+
+      <NotificationCenter theme={theme} />
     </div>
   );
 }
@@ -391,8 +469,97 @@ function AppContent({
   onOpenDeviceIdentity,
   isMobile = false
 }: any) {
+  const { soundEnabled, setSoundEnabled, notificationsEnabled, setNotificationsEnabled, playSound } = useAppFeedback();
+  const [prefsOpen, setPrefsOpen] = useState(false);
+
   return (
     <div className={`flex flex-col h-full w-full bg-transparent selection:bg-jarvis-accent-cyan/30 relative ${isMobile ? 'overflow-x-hidden' : ''}`}>
+      {/* Sound & Notification Preferences Popover */}
+      <AnimatePresence>
+        {prefsOpen && (
+          <>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 z-[260]"
+              onClick={() => setPrefsOpen(false)}
+            />
+            <motion.div
+              initial={{ opacity: 0, y: -8, scale: 0.96 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: -8, scale: 0.96 }}
+              transition={{ type: 'spring', stiffness: 360, damping: 28 }}
+              className={`fixed top-20 right-4 z-[270] w-72 rounded-2xl border backdrop-blur-2xl shadow-2xl overflow-hidden ${
+                theme === 'dark' ? 'bg-black/80 border-white/10' : 'bg-white/95 border-slate-200'
+              }`}
+              role="dialog"
+              aria-label="Sound and notification preferences"
+            >
+              <div className={`px-4 py-3 border-b flex items-center gap-2 ${theme === 'dark' ? 'border-white/5' : 'border-slate-100'}`}>
+                <Bell className="w-4 h-4 text-jarvis-accent-cyan" />
+                <span className={`text-[10px] font-display font-black uppercase tracking-[0.2em] ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>
+                  Feedback
+                </span>
+                <button
+                  onClick={() => setPrefsOpen(false)}
+                  className={`ml-auto rounded-md p-1 transition-colors ${theme === 'dark' ? 'text-slate-500 hover:text-white hover:bg-white/5' : 'text-slate-400 hover:text-slate-700 hover:bg-slate-100'}`}
+                  aria-label="Close preferences"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <div className="p-3 flex flex-col gap-2">
+                <PrefRow
+                  theme={theme}
+                  active={soundEnabled}
+                  onToggle={() => setSoundEnabled(!soundEnabled)}
+                  iconOn={<Volume2 className="w-4 h-4" />}
+                  iconOff={<VolumeX className="w-4 h-4" />}
+                  title="App Sounds"
+                  hint={soundEnabled ? 'Synthesized cues for play, deploy, alerts.' : 'Audible cues are silenced.'}
+                />
+                <PrefRow
+                  theme={theme}
+                  active={notificationsEnabled}
+                  onToggle={() => {
+                    const next = !notificationsEnabled;
+                    setNotificationsEnabled(next);
+                    if (next) playSound('notify');
+                  }}
+                  iconOn={<Bell className="w-4 h-4" />}
+                  iconOff={<BellOff className="w-4 h-4" />}
+                  title="In-App Alerts"
+                  hint={notificationsEnabled ? 'Toast feedback for agents and decks.' : 'Toasts hidden — sounds may still play.'}
+                />
+
+                <div className="flex gap-2 pt-2">
+                  <button
+                    onClick={() => {
+                      playSound('notify');
+                    }}
+                    disabled={!soundEnabled}
+                    className={`flex-1 rounded-lg border px-3 py-2 text-[10px] font-mono font-bold uppercase tracking-widest transition-all ${
+                      soundEnabled
+                        ? theme === 'dark'
+                          ? 'bg-jarvis-accent-cyan/10 border-jarvis-accent-cyan/30 text-jarvis-accent-cyan hover:bg-jarvis-accent-cyan/20'
+                          : 'bg-jarvis-accent-cyan/5 border-jarvis-accent-cyan/30 text-jarvis-accent-cyan hover:bg-jarvis-accent-cyan/10'
+                        : theme === 'dark'
+                        ? 'bg-white/5 border-white/5 text-slate-600'
+                        : 'bg-slate-100 border-slate-200 text-slate-400'
+                    }`}
+                  >
+                    <Volume1 className="w-3.5 h-3.5 inline-block mr-1 -mt-0.5" />
+                    Test Sound
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+
       {/* Discovery Animation 2: Deployment Beam */}
       <AnimatePresence>
         {isDeploying && (
@@ -490,8 +657,11 @@ function AppContent({
           </div>
 
           <div className="flex items-center gap-6">
-            <button 
-              onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+            <button
+              onClick={() => {
+                playSound('toggle');
+                setTheme(theme === 'dark' ? 'light' : 'dark');
+              }}
               className={`p-2 rounded-lg border transition-all ${
                 theme === 'dark' ? 'bg-white/5 border-white/10 text-white hover:bg-white/10' : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100 shadow-sm'
               }`}
@@ -508,11 +678,23 @@ function AppContent({
               </div>
               <span className="ml-3 text-[10px] font-mono font-bold text-jarvis-accent-pink tracking-widest leading-none">LV 4</span>
             </div>
-            <div className="flex items-center gap-3">
-              <Bell className={`w-5 h-5 cursor-pointer transition-colors ${theme === 'dark' ? 'text-slate-500 hover:text-jarvis-accent-cyan' : 'text-slate-400 hover:text-slate-600'}`} />
-              <Settings 
+            <div className="flex items-center gap-3 relative">
+              <button
+                onClick={() => {
+                  playSound('click');
+                  setPrefsOpen(o => !o);
+                }}
+                aria-label="Sound and notification preferences"
+                className={`relative transition-colors ${theme === 'dark' ? 'text-slate-500 hover:text-jarvis-accent-cyan' : 'text-slate-400 hover:text-slate-600'}`}
+              >
+                {notificationsEnabled ? <Bell className="w-5 h-5" /> : <BellOff className="w-5 h-5" />}
+                {(!soundEnabled || !notificationsEnabled) && (
+                  <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-amber-400 shadow-[0_0_6px_rgba(251,191,36,0.8)]" />
+                )}
+              </button>
+              <Settings
                 onClick={() => setIsVaultOpen(true)}
-                className={`w-5 h-5 cursor-pointer transition-colors ${theme === 'dark' ? 'text-slate-500 hover:text-jarvis-accent-cyan' : 'text-slate-400 hover:text-slate-600'}`} 
+                className={`w-5 h-5 cursor-pointer transition-colors ${theme === 'dark' ? 'text-slate-500 hover:text-jarvis-accent-cyan' : 'text-slate-400 hover:text-slate-600'}`}
               />
               <div className={`w-8 h-8 rounded-full border-2 overflow-hidden transition-colors ${
                 theme === 'dark' ? 'border-jarvis-accent-cyan/50 bg-slate-800' : 'border-slate-200 bg-slate-100'
@@ -530,16 +712,35 @@ function AppContent({
           theme === 'dark' ? 'bg-black/40 border-white/5' : 'bg-white/40 border-slate-200'
         }`}>
            <Logo className="scale-90 origin-left" />
-           <div className="flex items-center gap-4">
-              <button 
-                onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+           <div className="flex items-center gap-3 relative">
+              <button
+                onClick={() => {
+                  playSound('toggle');
+                  setTheme(theme === 'dark' ? 'light' : 'dark');
+                }}
                 className={`w-10 h-10 rounded-full flex items-center justify-center border transition-all ${
                   theme === 'dark' ? 'bg-white/5 border-white/10 text-white' : 'bg-slate-100 border-slate-200 text-slate-600'
                 }`}
               >
                 {theme === 'dark' ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
               </button>
-              <button 
+              <button
+                onClick={() => {
+                  playSound('click');
+                  setPrefsOpen(o => !o);
+                }}
+                aria-label="Sound and notification preferences"
+                aria-expanded={prefsOpen}
+                className={`w-10 h-10 rounded-full flex items-center justify-center border transition-all relative ${
+                  theme === 'dark' ? 'bg-white/5 border-white/10 text-white' : 'bg-slate-100 border-slate-200 text-slate-600'
+                } ${prefsOpen ? 'ring-2 ring-jarvis-accent-cyan/40' : ''}`}
+              >
+                {notificationsEnabled ? <Bell className="w-5 h-5" /> : <BellOff className="w-5 h-5" />}
+                {(!soundEnabled || !notificationsEnabled) && (
+                  <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-amber-400 shadow-[0_0_6px_rgba(251,191,36,0.8)]" />
+                )}
+              </button>
+              <button
                 onClick={() => setIsVaultOpen(true)}
                 className={`w-10 h-10 rounded-full flex items-center justify-center border transition-all ${
                   theme === 'dark' ? 'bg-white/5 border-white/10 text-white' : 'bg-slate-100 border-slate-200 text-slate-600'
@@ -986,7 +1187,7 @@ function AppContent({
                              <button
                                onClick={(e) => {
                                  e.stopPropagation();
-                                 if (!rec.isLiked) onLike();
+                                 if (!rec.isLiked) onLike(rec);
                                  setSuggestions(prev => prev.map(s => s.id === rec.id ? { ...s, isLiked: !s.isLiked } : s));
                                }}
                                className={`w-7 h-7 rounded-full flex items-center justify-center transition-all shadow-lg ${rec.isLiked ? 'bg-red-500 text-white' : 'bg-slate-800 text-white hover:bg-red-500/20'}`}
@@ -1141,5 +1342,62 @@ function AppContent({
         </footer>
       )}
     </div>
+  );
+}
+
+interface PrefRowProps {
+  theme: 'dark' | 'light';
+  active: boolean;
+  onToggle: () => void;
+  iconOn: React.ReactNode;
+  iconOff: React.ReactNode;
+  title: string;
+  hint: string;
+}
+
+function PrefRow({ theme, active, onToggle, iconOn, iconOff, title, hint }: PrefRowProps) {
+  const isDark = theme === 'dark';
+  return (
+    <button
+      onClick={onToggle}
+      role="switch"
+      aria-checked={active}
+      className={`flex items-center gap-3 rounded-xl border p-3 text-left transition-all ${
+        active
+          ? isDark
+            ? 'bg-jarvis-accent-cyan/10 border-jarvis-accent-cyan/30'
+            : 'bg-jarvis-accent-cyan/5 border-jarvis-accent-cyan/30'
+          : isDark
+          ? 'bg-white/5 border-white/5 hover:bg-white/10'
+          : 'bg-slate-50 border-slate-200 hover:bg-slate-100'
+      }`}
+    >
+      <div
+        className={`flex h-9 w-9 items-center justify-center rounded-lg ${
+          active
+            ? 'bg-jarvis-accent-cyan/20 text-jarvis-accent-cyan'
+            : isDark
+            ? 'bg-white/5 text-slate-500'
+            : 'bg-slate-200 text-slate-500'
+        }`}
+      >
+        {active ? iconOn : iconOff}
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className={`font-display text-[12px] font-bold ${isDark ? 'text-white' : 'text-slate-900'}`}>{title}</div>
+        <div className={`font-mono text-[9px] uppercase tracking-wider truncate ${isDark ? 'text-slate-500' : 'text-slate-500'}`}>
+          {hint}
+        </div>
+      </div>
+      <span
+        className={`relative h-5 w-9 rounded-full transition-colors ${
+          active ? 'bg-jarvis-accent-cyan' : isDark ? 'bg-white/10' : 'bg-slate-300'
+        }`}
+      >
+        <span
+          className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-all ${active ? 'left-4' : 'left-0.5'}`}
+        />
+      </span>
+    </button>
   );
 }
