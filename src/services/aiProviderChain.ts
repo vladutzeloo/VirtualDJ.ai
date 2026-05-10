@@ -13,13 +13,10 @@
  */
 
 import { hasApiKey } from './apiKeyManager';
+import { getPreferredModel } from './modelCatalog';
 import { runNvidiaChat, DEFAULT_NVIDIA_MODEL } from './nvidiaService';
 import { runKimiChat, DEFAULT_KIMI_MODEL } from './kimiService';
-import {
-  runLocalLlmChat,
-  hasLocalLlmConfig,
-  getLocalLlmConfig,
-} from './localLlmService';
+import { runLocalLlmChat, hasLocalLlmConfig } from './localLlmService';
 
 export type AiProviderId = 'nvidia' | 'kimi' | 'local';
 
@@ -55,7 +52,7 @@ const PROVIDERS: ChainProvider[] = [
   {
     id: 'nvidia',
     available: () => hasApiKey('nvidia'),
-    resolveModel: () => DEFAULT_NVIDIA_MODEL,
+    resolveModel: () => getPreferredModel('nvidia') || DEFAULT_NVIDIA_MODEL,
     run: (opts) =>
       runNvidiaChat({
         messages: opts.messages,
@@ -68,7 +65,7 @@ const PROVIDERS: ChainProvider[] = [
   {
     id: 'kimi',
     available: () => hasApiKey('kimi'),
-    resolveModel: () => DEFAULT_KIMI_MODEL,
+    resolveModel: () => getPreferredModel('kimi') || DEFAULT_KIMI_MODEL,
     run: (opts) =>
       runKimiChat({
         messages: opts.messages,
@@ -81,7 +78,7 @@ const PROVIDERS: ChainProvider[] = [
   {
     id: 'local',
     available: () => hasLocalLlmConfig(),
-    resolveModel: () => getLocalLlmConfig().model,
+    resolveModel: () => getPreferredModel('local'),
     run: (opts) =>
       runLocalLlmChat({
         messages: opts.messages,

@@ -3,14 +3,15 @@
  *
  * Talks to any OpenAI-compatible chat completions endpoint running locally
  * (Ollama, LM Studio, llama.cpp server, vLLM, text-generation-webui, …).
- * Configuration lives in localStorage so the user can point the app at
+ * Endpoint config lives in localStorage so the user can point the app at
  * whatever stack they prefer from the Neural Vault.
  *
- * The optional Bearer token (only needed for vLLM and similar setups that
- * require auth) is stored alongside the cloud provider keys via
- * apiKeyManager — there is one source of truth for secrets. Only the
- * non-secret endpoint config (base URL + model) lives in the local config
- * here.
+ * Model selection goes through the unified `modelCatalog` store (same UI
+ * as the cloud providers); the model id used for `'local'` is whatever
+ * `getPreferredModel('local')` returns. The optional Bearer token (only
+ * needed for vLLM and similar setups that require auth) is stored
+ * alongside the cloud provider keys via `apiKeyManager`. Only the base
+ * URL — the one piece of state without a cloud analogue — lives here.
  *
  * This is the bottom rung of the AI provider chain: when no cloud provider
  * is configured (or all of them fail) we fall back here so the app keeps
@@ -18,20 +19,19 @@
  */
 
 import { getApiKey } from './apiKeyManager';
+import { getPreferredModel } from './modelCatalog';
 import { recordUsage } from './usageTracker';
 
 const STORAGE_KEY = 'vdj.local-llm.config.v1';
 
 export interface LocalLlmConfig {
   baseUrl: string;
-  model: string;
 }
 
 export const DEFAULT_LOCAL_LLM_CONFIG: LocalLlmConfig = {
   // Ollama's OpenAI-compatible endpoint. LM Studio: http://localhost:1234/v1
   // llama.cpp server: http://localhost:8080/v1, vLLM: http://localhost:8000/v1
   baseUrl: 'http://localhost:11434/v1',
-  model: 'llama3.2',
 };
 
 type Listener = () => void;
@@ -51,7 +51,6 @@ export const getLocalLlmConfig = (): LocalLlmConfig => {
     const parsed = JSON.parse(raw) as Partial<LocalLlmConfig>;
     return {
       baseUrl: parsed.baseUrl?.trim() || DEFAULT_LOCAL_LLM_CONFIG.baseUrl,
-      model: parsed.model?.trim() || DEFAULT_LOCAL_LLM_CONFIG.model,
     };
   } catch {
     return { ...DEFAULT_LOCAL_LLM_CONFIG };
@@ -62,7 +61,6 @@ export const setLocalLlmConfig = (next: Partial<LocalLlmConfig>): void => {
   if (typeof localStorage === 'undefined') return;
   const merged: LocalLlmConfig = {
     baseUrl: next.baseUrl?.trim() || getLocalLlmConfig().baseUrl,
-    model: next.model?.trim() || getLocalLlmConfig().model,
   };
   localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
   notify();
@@ -122,7 +120,7 @@ export const runLocalLlmChat = async ({
   feature = 'local-llm:chat',
 }: LocalLlmChatOptions): Promise<{ text: string; raw: LocalChatResponse }> => {
   const cfg = getLocalLlmConfig();
-  const resolvedModel = model ?? cfg.model;
+  const resolvedModel = model ?? getPreferredModel('local');
 
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',

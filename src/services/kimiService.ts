@@ -11,11 +11,12 @@
  */
 
 import { getApiKey, hasApiKey, markKeyUsed } from './apiKeyManager';
+import { getPreferredModel } from './modelCatalog';
 import { recordUsage } from './usageTracker';
 
 const KIMI_BASE_URL = 'https://api.moonshot.ai/v1';
 
-export const DEFAULT_KIMI_MODEL = 'moonshot-v1-32k';
+export const DEFAULT_KIMI_MODEL = 'moonshot-v1-128k';
 
 export interface KimiChatMessage {
   role: 'system' | 'user' | 'assistant';
@@ -59,7 +60,7 @@ const stripJsonFences = (raw: string): string =>
 export const isKimiConfigured = (): boolean => hasApiKey('kimi');
 
 export const runKimiChat = async ({
-  model = DEFAULT_KIMI_MODEL,
+  model,
   messages,
   temperature = 0.7,
   topP = 0.95,
@@ -67,6 +68,7 @@ export const runKimiChat = async ({
   feature = 'kimi:chat',
 }: KimiChatOptions): Promise<{ text: string; raw: KimiChatResponse }> => {
   const apiKey = requireKey();
+  const resolvedModel = model ?? getPreferredModel('kimi');
 
   const response = await fetch(`${KIMI_BASE_URL}/chat/completions`, {
     method: 'POST',
@@ -76,7 +78,7 @@ export const runKimiChat = async ({
       Authorization: `Bearer ${apiKey}`,
     },
     body: JSON.stringify({
-      model,
+      model: resolvedModel,
       messages,
       temperature,
       top_p: topP,
@@ -101,7 +103,7 @@ export const runKimiChat = async ({
 
   recordUsage({
     provider: 'kimi',
-    model,
+    model: resolvedModel,
     feature,
     inputTokens: data.usage?.prompt_tokens ?? 0,
     outputTokens: data.usage?.completion_tokens ?? 0,

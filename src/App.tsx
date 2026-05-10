@@ -587,7 +587,6 @@ export default function App() {
     audioRef.current?.pause();
     setTracks(prev => prev.map(t => t.id === track.id ? { ...t, isPlaying: false } : t));
     setLocalTracks(prev => prev.map(t => t.id === track.id ? { ...t, isPlaying: false } : t));
-    setPlayback(p => ({ ...p, id: null }));
     addLog(track.agentLabel, `Paused: ${track.title}`, 'info');
     vibrate(15);
     dispatchWebhook('track.paused', {
@@ -618,8 +617,9 @@ export default function App() {
       addLog('GYRO', `Flick ${dir.toUpperCase()} — cycling layer focus.`, 'info');
       vibrate(15);
       if (dir === 'right' || dir === 'up') {
-        const playingIdx = tracks.findIndex(t => t.isPlaying);
-        const nextIdx = tracks.length === 0 ? -1 : playingIdx === -1 ? 0 : (playingIdx + 1) % tracks.length;
+        const loadedIdx = playback.id ? tracks.findIndex(t => t.id === playback.id) : -1;
+        const currentIdx = loadedIdx >= 0 ? loadedIdx : tracks.findIndex(t => t.isPlaying);
+        const nextIdx = tracks.length === 0 ? -1 : currentIdx === -1 ? 0 : (currentIdx + 1) % tracks.length;
         if (nextIdx >= 0) playTrack(tracks[nextIdx]);
       } else {
         audioRef.current?.pause();
@@ -783,6 +783,21 @@ export default function App() {
     } else {
       playTrack(track);
     }
+  };
+
+  const playNextTrack = () => {
+    if (tracks.length === 0) return;
+    const loadedIdx = playback.id ? tracks.findIndex(t => t.id === playback.id) : -1;
+    const currentIdx = loadedIdx >= 0 ? loadedIdx : tracks.findIndex(t => t.isPlaying);
+    const nextIdx = currentIdx === -1 ? 0 : (currentIdx + 1) % tracks.length;
+    playTrack(tracks[nextIdx]);
+  };
+
+  const restartCurrentTrack = () => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    audio.currentTime = 0;
+    setPlayback(p => ({ ...p, currentTime: 0 }));
   };
 
   const addTrack = (rec: TrackRecommendation, notes?: string) => {
@@ -993,6 +1008,8 @@ export default function App() {
             setMixerValues={setMixerValues}
             fetchSuggestions={fetchSuggestions}
             togglePlay={togglePlay}
+            onNextTrack={playNextTrack}
+            onRestartTrack={restartCurrentTrack}
             addTrack={addTrack}
             searchMode={searchMode}
             setSearchMode={setSearchMode}
@@ -1124,8 +1141,10 @@ function AppContent({
   logs, 
   mixerValues, 
   setMixerValues, 
-  fetchSuggestions, 
-  togglePlay, 
+  fetchSuggestions,
+  togglePlay,
+  onNextTrack,
+  onRestartTrack,
   addTrack,
   searchMode,
   setSearchMode,
@@ -1952,8 +1971,10 @@ function AppContent({
 
           <div className="flex flex-col gap-4 h-full">
                 {(() => {
-                  const playingIdx = tracks.findIndex((t: TrackData) => t.isPlaying);
-                  const playingTrack: TrackData | undefined = playingIdx >= 0 ? tracks[playingIdx] : undefined;
+                  const loadedIdx = playback.id ? tracks.findIndex((t: TrackData) => t.id === playback.id) : -1;
+                  const activeIdx = loadedIdx >= 0 ? loadedIdx : tracks.findIndex((t: TrackData) => t.isPlaying);
+                  const playingTrack: TrackData | undefined = activeIdx >= 0 ? tracks[activeIdx] : undefined;
+                  const playingIdx = activeIdx;
                   const queue = tracks.filter((_: TrackData, i: number) => i !== playingIdx);
                   return (
                     <>
@@ -1972,6 +1993,8 @@ function AppContent({
                           title={`Layer ${String.fromCharCode(65 + playingIdx)}`}
                           track={playingTrack}
                           onPlayToggle={() => togglePlay(playingTrack.id)}
+                          onNext={tracks.length > 1 ? onNextTrack : undefined}
+                          onRestart={onRestartTrack}
                           currentTime={playback.id === playingTrack.id ? playback.currentTime : 0}
                           totalSeconds={playback.id === playingTrack.id ? playback.duration : 0}
                         />

@@ -11,6 +11,7 @@
  */
 
 import { getApiKey, hasApiKey, markKeyUsed } from './apiKeyManager';
+import { getPreferredModel } from './modelCatalog';
 import { recordUsage } from './usageTracker';
 
 const NVIDIA_BASE_URL = 'https://integrate.api.nvidia.com/v1';
@@ -59,7 +60,7 @@ const stripJsonFences = (raw: string): string =>
 export const isNvidiaConfigured = (): boolean => hasApiKey('nvidia');
 
 export const runNvidiaChat = async ({
-  model = DEFAULT_NVIDIA_MODEL,
+  model,
   messages,
   temperature = 0.7,
   topP = 0.95,
@@ -67,6 +68,7 @@ export const runNvidiaChat = async ({
   feature = 'nvidia:chat',
 }: NvidiaChatOptions): Promise<{ text: string; raw: NvidiaChatResponse }> => {
   const apiKey = requireKey();
+  const resolvedModel = model ?? getPreferredModel('nvidia');
 
   const response = await fetch(`${NVIDIA_BASE_URL}/chat/completions`, {
     method: 'POST',
@@ -76,7 +78,7 @@ export const runNvidiaChat = async ({
       Authorization: `Bearer ${apiKey}`,
     },
     body: JSON.stringify({
-      model,
+      model: resolvedModel,
       messages,
       temperature,
       top_p: topP,
@@ -101,7 +103,7 @@ export const runNvidiaChat = async ({
 
   recordUsage({
     provider: 'nvidia',
-    model,
+    model: resolvedModel,
     feature,
     inputTokens: data.usage?.prompt_tokens ?? 0,
     outputTokens: data.usage?.completion_tokens ?? 0,
@@ -112,7 +114,7 @@ export const runNvidiaChat = async ({
 
 /**
  * Run an NVIDIA chat call expecting a JSON object response. Strips ```json
- * fences and parses defensively, mirroring the Claude/Gemini service style.
+ * fences and parses defensively, mirroring the Kimi/Gemini service style.
  */
 export const runNvidiaJson = async <T = unknown>(
   options: NvidiaChatOptions,
