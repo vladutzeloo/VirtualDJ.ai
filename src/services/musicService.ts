@@ -19,6 +19,7 @@ export interface GroundingSource {
 }
 
 export interface TrackRecommendation {
+  id: string;
   title: string;
   artist: string;
   genre: string;
@@ -29,9 +30,15 @@ export interface TrackRecommendation {
   previewUrl: string;
   imageUrl?: string;
   isLiked?: boolean;
+  isDisliked?: boolean;
+  feedbackReason?: string;
+  inPlaylist?: boolean;
   notes?: string;
   sources?: GroundingSource[];
 }
+
+export const makeTrackId = (title: string, artist: string): string =>
+  `${title}::${artist}`.toLowerCase().replace(/\s+/g, '-').slice(0, 120);
 
 const RECOMMENDATION_PROMPT = (genrePreference: string) => `You are a DJ-curation agent with live web access. Use Google Search to find REAL, currently-released ${genrePreference} tracks (prefer the last 24 months when possible). Verify titles, artists and release dates against the web.
 
@@ -90,17 +97,22 @@ export const getTrackRecommendations = async (genrePreference: string): Promise<
       .filter((w: any) => w?.uri)
       .map((w: any) => ({ uri: w.uri as string, title: (w.title as string) ?? w.uri }));
 
-    return parsed.map((rec: any) => ({
-      title: String(rec.title ?? ""),
-      artist: String(rec.artist ?? ""),
-      genre: String(rec.genre ?? genrePreference),
-      agentLabel: String(rec.agentLabel ?? "AUTO-CURATOR"),
-      confidence: typeof rec.confidence === "number" ? rec.confidence : 0.85,
-      tags: Array.isArray(rec.tags) ? rec.tags.map(String) : [],
-      releaseDate: String(rec.releaseDate ?? ""),
-      previewUrl: String(rec.previewUrl ?? ""),
-      sources,
-    }));
+    return parsed.map((rec: any) => {
+      const title = String(rec.title ?? "");
+      const artist = String(rec.artist ?? "");
+      return {
+        id: makeTrackId(title, artist),
+        title,
+        artist,
+        genre: String(rec.genre ?? genrePreference),
+        agentLabel: String(rec.agentLabel ?? "AUTO-CURATOR"),
+        confidence: typeof rec.confidence === "number" ? rec.confidence : 0.85,
+        tags: Array.isArray(rec.tags) ? rec.tags.map(String) : [],
+        releaseDate: String(rec.releaseDate ?? ""),
+        previewUrl: String(rec.previewUrl ?? ""),
+        sources,
+      };
+    });
   } catch (error) {
     console.error("Gemini Error:", error);
     return [];

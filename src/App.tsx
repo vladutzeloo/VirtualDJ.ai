@@ -14,6 +14,8 @@ import {
   Music,
   Disc,
   Heart,
+  ThumbsDown,
+  ListMusic,
   Plus,
   Trash2,
   Bot,
@@ -32,6 +34,7 @@ import { StatItem } from './components/StatItem';
 import { MixerKnob } from './components/MixerKnob';
 import { TrackLayer, TrackData } from './components/TrackLayer';
 import { getTrackRecommendations, TrackRecommendation } from './services/musicService';
+import { PlaylistPanel } from './components/PlaylistPanel';
 import { generateTrackArtwork, generateAgentAvatar } from './services/imageService';
 import { JulesAgent } from './components/JulesAgent';
 import { TrackModal } from './components/TrackModal';
@@ -100,6 +103,117 @@ export default function App() {
   const [suggestions, setSuggestions] = useState<TrackRecommendation[]>([]);
   const [loadingSuggestions, setLoadingSuggestions] = useState(false);
   const [selectedTrack, setSelectedTrack] = useState<TrackRecommendation | null>(null);
+
+  const PREFS_STORAGE_KEY = 'vdj.songPreferences.v1';
+  type StoredPrefs = {
+    playlist: TrackRecommendation[];
+    liked: TrackRecommendation[];
+    disliked: TrackRecommendation[];
+  };
+  const [prefs, setPrefs] = useState<StoredPrefs>(() => {
+    if (typeof window === 'undefined') return { playlist: [], liked: [], disliked: [] };
+    try {
+      const raw = window.localStorage.getItem(PREFS_STORAGE_KEY);
+      if (!raw) return { playlist: [], liked: [], disliked: [] };
+      const parsed = JSON.parse(raw);
+      return {
+        playlist: Array.isArray(parsed.playlist) ? parsed.playlist : [],
+        liked: Array.isArray(parsed.liked) ? parsed.liked : [],
+        disliked: Array.isArray(parsed.disliked) ? parsed.disliked : [],
+      };
+    } catch {
+      return { playlist: [], liked: [], disliked: [] };
+    }
+  });
+  const [isPlaylistOpen, setIsPlaylistOpen] = useState(false);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      window.localStorage.setItem(PREFS_STORAGE_KEY, JSON.stringify(prefs));
+    } catch {
+      /* storage full or disabled */
+    }
+  }, [prefs]);
+
+  const upsertPref = (
+    bucket: 'liked' | 'disliked' | 'playlist',
+    track: TrackRecommendation,
+  ) => {
+    setPrefs(prev => {
+      const without = prev[bucket].filter(t => t.id !== track.id);
+      return { ...prev, [bucket]: [{ ...track }, ...without] };
+    });
+  };
+  const removePref = (bucket: 'liked' | 'disliked' | 'playlist', id: string) => {
+    setPrefs(prev => ({ ...prev, [bucket]: prev[bucket].filter(t => t.id !== id) }));
+  };
+
+  const setVerdict = (
+    rec: TrackRecommendation,
+    verdict: 'like' | 'dislike' | 'clear',
+  ) => {
+    const reason =
+      verdict === 'clear'
+        ? undefined
+        : window.prompt(
+            verdict === 'like'
+              ? 'Why do you like this track? (optional — helps the agent learn)'
+              : "What's off about this track? (optional — helps the agent learn)",
+          ) ?? undefined;
+
+    setSuggestions(prev =>
+      prev.map(s =>
+        s.id === rec.id
+          ? {
+              ...s,
+              isLiked: verdict === 'like',
+              isDisliked: verdict === 'dislike',
+              feedbackReason: verdict === 'clear' ? undefined : reason ?? s.feedbackReason,
+            }
+          : s,
+      ),
+    );
+
+    if (verdict === 'clear') {
+      removePref('liked', rec.id);
+      removePref('disliked', rec.id);
+      addLog('TASTE-AGENT', `Cleared verdict for "${rec.title}".`, 'info');
+      return;
+    }
+
+    const updated: TrackRecommendation = {
+      ...rec,
+      isLiked: verdict === 'like',
+      isDisliked: verdict === 'dislike',
+      feedbackReason: reason,
+    };
+    if (verdict === 'like') {
+      removePref('disliked', rec.id);
+      upsertPref('liked', updated);
+      onLikeIncrement();
+      addLog('TASTE-AGENT', `Liked "${rec.title}". Updating taste profile.`, 'success');
+    } else {
+      removePref('liked', rec.id);
+      upsertPref('disliked', updated);
+      addLog('TASTE-AGENT', `Disliked "${rec.title}". Updating taste profile.`, 'warn');
+    }
+  };
+
+  const sendToPlaylist = (rec: TrackRecommendation) => {
+    if (prefs.playlist.some(t => t.id === rec.id)) {
+      addLog('PLAYLIST', `"${rec.title}" already in playlist.`, 'info');
+      return;
+    }
+    upsertPref('playlist', { ...rec, inPlaylist: true });
+    setSuggestions(prev =>
+      prev.map(s => (s.id === rec.id ? { ...s, inPlaylist: true } : s)),
+    );
+    addLog('PLAYLIST', `Sent "${rec.title}" to playlist.`, 'success');
+  };
+
+  const onLikeIncrement = () =>
+    setUsage(prev => ({ ...prev, tracksLiked: prev.tracksLiked + 1 }));
   const [isDeploying, setIsDeploying] = useState(false);
   const [searchQuery, setSearchQuery] = useState('spor dnb');
   const [searchMode, setSearchMode] = useState<'GLOBAL' | 'LOCAL'>('GLOBAL');
@@ -139,7 +253,19 @@ export default function App() {
     setUsage(prev => ({ ...prev, searchesRun: prev.searchesRun + 1 }));
     addLog(searchMode === 'GLOBAL' ? 'DIGGER' : 'LOCAL-BOT', `Scanning ${searchMode.toLowerCase()} archives for ${query}...`, 'info');
     const recs = await getTrackRecommendations(`${query}${searchMode === 'LOCAL' ? ' (local recording style)' : ''}`);
-    setSuggestions(recs);
+    const hydrated = recs.map(rec => {
+      const liked = prefs.liked.find(t => t.id === rec.id);
+      const disliked = prefs.disliked.find(t => t.id === rec.id);
+      const inList = prefs.playlist.some(t => t.id === rec.id);
+      return {
+        ...rec,
+        isLiked: Boolean(liked),
+        isDisliked: Boolean(disliked),
+        feedbackReason: liked?.feedbackReason ?? disliked?.feedbackReason,
+        inPlaylist: inList,
+      };
+    });
+    setSuggestions(hydrated);
     setLoadingSuggestions(false);
     addLog('ANALYST', `Processed ${recs.length} candidates. Pattern matching rank confirmed.`, 'success');
 
@@ -318,13 +444,42 @@ export default function App() {
             setSuggestions={setSuggestions}
             onGesture={handleGesture}
             onFileUpload={handleFileUpload}
-            onLike={() => setUsage(prev => ({ ...prev, tracksLiked: prev.tracksLiked + 1 }))}
+            onSetVerdict={setVerdict}
+            onSendToPlaylist={sendToPlaylist}
+            onOpenPlaylist={() => setIsPlaylistOpen(true)}
+            playlistCount={prefs.playlist.length}
             telemetry={telemetry}
             onOpenDeviceIdentity={() => setIsDeviceIdentityOpen(true)}
             isMobile={true}
           />
         </div>
       </div>
+
+      <PlaylistPanel
+        isOpen={isPlaylistOpen}
+        onClose={() => setIsPlaylistOpen(false)}
+        playlist={prefs.playlist}
+        liked={prefs.liked}
+        disliked={prefs.disliked}
+        onRemoveFromPlaylist={(id) => removePref('playlist', id)}
+        onClearVerdict={(id) => {
+          removePref('liked', id);
+          removePref('disliked', id);
+          setSuggestions(prev =>
+            prev.map(s =>
+              s.id === id
+                ? { ...s, isLiked: false, isDisliked: false, feedbackReason: undefined }
+                : s,
+            ),
+          );
+        }}
+        onUseSeedQuery={(seed) => {
+          if (!seed) return;
+          setSearchQuery(seed);
+          fetchSuggestions(seed);
+        }}
+        theme={theme}
+      />
 
       <AnimatePresence>
         {isVaultOpen && <Vault isOpen={isVaultOpen} onClose={() => setIsVaultOpen(false)} theme={theme} />}
@@ -386,7 +541,10 @@ function AppContent({
   setSuggestions,
   onGesture,
   onFileUpload,
-  onLike,
+  onSetVerdict,
+  onSendToPlaylist,
+  onOpenPlaylist,
+  playlistCount,
   telemetry,
   onOpenDeviceIdentity,
   isMobile = false
@@ -509,10 +667,22 @@ function AppContent({
               <span className="ml-3 text-[10px] font-mono font-bold text-jarvis-accent-pink tracking-widest leading-none">LV 4</span>
             </div>
             <div className="flex items-center gap-3">
+              <button
+                onClick={() => onOpenPlaylist?.()}
+                className={`relative p-1.5 rounded-md transition-colors ${theme === 'dark' ? 'text-slate-500 hover:text-jarvis-accent-cyan' : 'text-slate-400 hover:text-slate-600'}`}
+                title="My Playlist & Taste Agent"
+              >
+                <ListMusic className="w-5 h-5" />
+                {playlistCount > 0 && (
+                  <span className="absolute -top-1 -right-1 min-w-[16px] h-[16px] px-1 rounded-full bg-jarvis-accent-pink text-[9px] font-mono font-bold text-white flex items-center justify-center">
+                    {playlistCount}
+                  </span>
+                )}
+              </button>
               <Bell className={`w-5 h-5 cursor-pointer transition-colors ${theme === 'dark' ? 'text-slate-500 hover:text-jarvis-accent-cyan' : 'text-slate-400 hover:text-slate-600'}`} />
-              <Settings 
+              <Settings
                 onClick={() => setIsVaultOpen(true)}
-                className={`w-5 h-5 cursor-pointer transition-colors ${theme === 'dark' ? 'text-slate-500 hover:text-jarvis-accent-cyan' : 'text-slate-400 hover:text-slate-600'}`} 
+                className={`w-5 h-5 cursor-pointer transition-colors ${theme === 'dark' ? 'text-slate-500 hover:text-jarvis-accent-cyan' : 'text-slate-400 hover:text-slate-600'}`}
               />
               <div className={`w-8 h-8 rounded-full border-2 overflow-hidden transition-colors ${
                 theme === 'dark' ? 'border-jarvis-accent-cyan/50 bg-slate-800' : 'border-slate-200 bg-slate-100'
@@ -539,13 +709,27 @@ function AppContent({
               >
                 {theme === 'dark' ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
               </button>
-              <button 
+              <button
                 onClick={() => setIsVaultOpen(true)}
                 className={`w-10 h-10 rounded-full flex items-center justify-center border transition-all ${
                   theme === 'dark' ? 'bg-white/5 border-white/10 text-white' : 'bg-slate-100 border-slate-200 text-slate-600'
                 }`}
               >
                 <Settings className="w-5 h-5" />
+              </button>
+              <button
+                onClick={() => onOpenPlaylist?.()}
+                className={`relative w-10 h-10 rounded-full flex items-center justify-center border transition-all ${
+                  theme === 'dark' ? 'bg-white/5 border-white/10 text-white' : 'bg-slate-100 border-slate-200 text-slate-600'
+                }`}
+                title="My Playlist & Taste Agent"
+              >
+                <ListMusic className="w-5 h-5" />
+                {playlistCount > 0 && (
+                  <span className="absolute -top-1 -right-1 min-w-[16px] h-[16px] px-1 rounded-full bg-jarvis-accent-pink text-[9px] font-mono font-bold text-white flex items-center justify-center">
+                    {playlistCount}
+                  </span>
+                )}
               </button>
               <button
                 onClick={() => onOpenDeviceIdentity()}
@@ -986,18 +1170,39 @@ function AppContent({
                              <button
                                onClick={(e) => {
                                  e.stopPropagation();
-                                 if (!rec.isLiked) onLike();
-                                 setSuggestions(prev => prev.map(s => s.id === rec.id ? { ...s, isLiked: !s.isLiked } : s));
+                                 onSetVerdict(rec, rec.isLiked ? 'clear' : 'like');
                                }}
-                               className={`w-7 h-7 rounded-full flex items-center justify-center transition-all shadow-lg ${rec.isLiked ? 'bg-red-500 text-white' : 'bg-slate-800 text-white hover:bg-red-500/20'}`}
+                               title={rec.isLiked ? 'Clear like' : 'Like (teach the agent why)'}
+                               className={`w-7 h-7 rounded-full flex items-center justify-center transition-all shadow-lg ${rec.isLiked ? 'bg-emerald-500 text-white' : 'bg-slate-800 text-white hover:bg-emerald-500/20'}`}
                              >
                                <Heart className={`w-3.5 h-3.5 ${rec.isLiked ? 'fill-current' : ''}`} />
                              </button>
-                             <button 
+                             <button
+                               onClick={(e) => {
+                                 e.stopPropagation();
+                                 onSetVerdict(rec, rec.isDisliked ? 'clear' : 'dislike');
+                               }}
+                               title={rec.isDisliked ? 'Clear dislike' : 'Dislike (teach the agent why)'}
+                               className={`w-7 h-7 rounded-full flex items-center justify-center transition-all shadow-lg ${rec.isDisliked ? 'bg-rose-500 text-white' : 'bg-slate-800 text-white hover:bg-rose-500/20'}`}
+                             >
+                               <ThumbsDown className={`w-3.5 h-3.5 ${rec.isDisliked ? 'fill-current' : ''}`} />
+                             </button>
+                             <button
+                               onClick={(e) => {
+                                 e.stopPropagation();
+                                 onSendToPlaylist(rec);
+                               }}
+                               title={rec.inPlaylist ? 'In playlist' : 'Send to playlist'}
+                               className={`w-7 h-7 rounded-full flex items-center justify-center transition-all shadow-lg ${rec.inPlaylist ? 'bg-jarvis-accent-pink text-white' : 'bg-slate-800 text-white hover:bg-jarvis-accent-pink/20'}`}
+                             >
+                               <ListMusic className="w-3.5 h-3.5" />
+                             </button>
+                             <button
                                onClick={(e) => {
                                  e.stopPropagation();
                                  addTrack(rec);
                                }}
+                               title="Add to mix"
                                className="w-7 h-7 rounded-full bg-jarvis-accent-cyan flex items-center justify-center text-jarvis-bg hover:scale-110 active:scale-95 transition-all shadow-lg"
                              >
                                <Plus className="w-4 h-4 stroke-[3]" />
