@@ -22,6 +22,7 @@ export const AGENT_PERSONAS = [
   'Neural Scout',
   'Crate Digger',
   'Waveform Sage',
+  'Rick Rubin',
 ] as const;
 
 export type AgentPersona = (typeof AGENT_PERSONAS)[number];
@@ -75,4 +76,5 @@ export const PERSONA_GENRE_SEED: Record<AgentPersona, string> = {
   'Neural Scout': 'new releases',
   'Crate Digger': 'deep cuts',
   'Waveform Sage': 'electronic',
+  'Rick Rubin': 'hip hop classics',
 };
