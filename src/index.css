@@ -1,56 +1,176 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&family=JetBrains+Mono:wght@400;500;700&family=Outfit:wght@400;700;900&display=swap');
+/*
+ * VirtualDJ.AI Design System
+ * Source: ui-ux-pro-max skill (.claude/skills/ui-ux-pro-max/)
+ *  - Style:      Dark Mode (OLED) + Cyberpunk UI hybrid
+ *  - Palette:    Music Streaming (deep indigo + play green) + neon HUD accents
+ *  - Typography: Kinetic Motion (Syncopate display + Space Mono HUD)
+ *                Exo 2 body for legibility (Crypto/Web3 pairing)
+ */
+@import url('https://fonts.googleapis.com/css2?family=Syncopate:wght@400;700&family=Exo+2:wght@300;400;500;600;700&family=Space+Mono:wght@400;700&display=swap');
 @import "tailwindcss";
 
 @theme {
-  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
-  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
-  --font-display: "Outfit", sans-serif;
+  /* Typography */
+  --font-sans: "Exo 2", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "Space Mono", ui-monospace, SFMono-Regular, monospace;
+  --font-display: "Syncopate", "Exo 2", sans-serif;
 
-  --color-jarvis-bg: #030708;
-  --color-jarvis-card: rgba(15, 20, 25, 0.4);
-  --color-jarvis-accent-cyan: #00f2ff;
-  --color-jarvis-accent-pink: #ffffff;
-  --color-jarvis-border: rgba(255, 255, 255, 0.08);
+  /* Brand surfaces (Music Streaming palette, OLED-friendly) */
+  --color-vdj-bg: #0F0F23;
+  --color-vdj-surface: #1A1A3A;
+  --color-vdj-surface-2: #1E1B4B;
+  --color-vdj-elevated: #312E81;
+  --color-vdj-border: rgba(99, 102, 241, 0.18);
+  --color-vdj-border-strong: rgba(99, 102, 241, 0.32);
+
+  /* Text */
+  --color-vdj-text: #F8FAFC;
+  --color-vdj-text-muted: #94A3B8;
+  --color-vdj-text-subtle: #64748B;
+
+  /* Brand + neon HUD accents */
+  --color-vdj-brand: #6366F1;
+  --color-vdj-cta: #22C55E;
+  --color-vdj-neon-cyan: #00F2FF;
+  --color-vdj-neon-magenta: #FF2EE6;
+  --color-vdj-neon-violet: #A855F7;
+  --color-vdj-warn: #F59E0B;
+  --color-vdj-danger: #EF4444;
+
+  /* Backwards-compat aliases — every existing `jarvis-*` class now
+     resolves to a design-system token. Do not introduce new aliases; use
+     the `vdj-*` names above for new code. */
+  --color-jarvis-bg: var(--color-vdj-bg);
+  --color-jarvis-card: rgba(30, 27, 75, 0.45);
+  --color-jarvis-accent-cyan: var(--color-vdj-neon-cyan);
+  --color-jarvis-accent-pink: var(--color-vdj-neon-magenta);
+  --color-jarvis-border: var(--color-vdj-border);
+
+  /* Radii (pill scale recommended for cyberpunk + media UI) */
+  --radius-vdj-sm: 0.375rem;
+  --radius-vdj: 0.625rem;
+  --radius-vdj-lg: 1rem;
+  --radius-vdj-xl: 1.5rem;
+  --radius-vdj-pill: 9999px;
 }
 
 @layer base {
+  html, body, #root {
+    height: 100%;
+  }
   body {
-    @apply bg-white text-slate-900 dark:bg-[#030708] dark:text-slate-300 font-sans overflow-hidden antialiased;
+    @apply bg-white text-slate-900 dark:bg-vdj-bg dark:text-vdj-text font-sans overflow-hidden antialiased;
+    font-feature-settings: "ss01", "cv11";
+  }
+  ::selection {
+    background: color-mix(in oklab, var(--color-vdj-neon-cyan) 35%, transparent);
+    color: var(--color-vdj-text);
   }
 }
 
-
-/* Custom Scrollbar */
-::-webkit-scrollbar {
-  width: 4px;
-  height: 4px;
-}
-::-webkit-scrollbar-track {
-  background: transparent;
-}
+/* Scrollbar — thin, cyan-tinted, matches HUD aesthetic */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb {
-  background: rgba(0, 242, 255, 0.2);
+  background: color-mix(in oklab, var(--color-vdj-neon-cyan) 22%, transparent);
   border-radius: 10px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(0, 242, 255, 0.4);
+  background: color-mix(in oklab, var(--color-vdj-neon-cyan) 45%, transparent);
 }
 
+/* ─── Surfaces ────────────────────────────────────────────────────── */
 .glass {
-  @apply backdrop-blur-xl border border-jarvis-border;
+  @apply backdrop-blur-xl border border-vdj-border;
+  background: linear-gradient(
+    180deg,
+    color-mix(in oklab, var(--color-vdj-surface-2) 55%, transparent) 0%,
+    color-mix(in oklab, var(--color-vdj-bg) 70%, transparent) 100%
+  );
+}
+.vdj-card {
+  @apply rounded-2xl border border-vdj-border bg-vdj-surface/60 backdrop-blur-xl;
+}
+.vdj-card-elevated {
+  @apply rounded-2xl border border-vdj-border-strong bg-vdj-surface-2/70 backdrop-blur-xl shadow-[0_0_40px_-12px_rgba(99,102,241,0.4)];
 }
 
-/* Styles removed to keep UI clean and simple */
+/* ─── Glow utilities (cyberpunk HUD) ──────────────────────────────── */
+.glow-cyan    { text-shadow: 0 0 10px color-mix(in oklab, var(--color-vdj-neon-cyan) 60%, transparent); }
+.glow-magenta { text-shadow: 0 0 10px color-mix(in oklab, var(--color-vdj-neon-magenta) 60%, transparent); }
+.glow-violet  { text-shadow: 0 0 10px color-mix(in oklab, var(--color-vdj-neon-violet) 60%, transparent); }
+.glow-cta     { text-shadow: 0 0 8px  color-mix(in oklab, var(--color-vdj-cta) 65%, transparent); }
+/* Legacy alias kept so existing components keep glowing the right colour */
+.glow-pink { text-shadow: 0 0 10px color-mix(in oklab, var(--color-vdj-neon-magenta) 60%, transparent); }
 
+.ring-glow-cyan    { box-shadow: 0 0 0 1px color-mix(in oklab, var(--color-vdj-neon-cyan) 35%, transparent), 0 0 24px -4px color-mix(in oklab, var(--color-vdj-neon-cyan) 50%, transparent); }
+.ring-glow-magenta { box-shadow: 0 0 0 1px color-mix(in oklab, var(--color-vdj-neon-magenta) 35%, transparent), 0 0 24px -4px color-mix(in oklab, var(--color-vdj-neon-magenta) 50%, transparent); }
+
+/* ─── Cyberpunk effects ───────────────────────────────────────────── */
 @keyframes scanline {
-  0% { transform: translateY(-100vh); }
+  0%   { transform: translateY(-100vh); }
   100% { transform: translateY(100vh); }
 }
-
-.glow-cyan {
-  text-shadow: 0 0 10px rgba(0, 242, 255, 0.5);
+@keyframes vdj-pulse {
+  0%, 100% { opacity: 0.55; }
+  50%      { opacity: 1; }
+}
+@keyframes vdj-shimmer {
+  0%   { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
 }
 
-.glow-pink {
-  text-shadow: 0 0 10px rgba(255, 0, 255, 0.5);
+.vdj-scanlines::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    to bottom,
+    transparent 0,
+    transparent 2px,
+    rgba(0, 242, 255, 0.04) 2px,
+    rgba(0, 242, 255, 0.04) 3px
+  );
+  border-radius: inherit;
+  mix-blend-mode: screen;
+}
+
+.vdj-shimmer {
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    color-mix(in oklab, var(--color-vdj-neon-cyan) 18%, transparent) 50%,
+    transparent 100%
+  );
+  background-size: 200% 100%;
+  animation: vdj-shimmer 2.4s linear infinite;
+}
+
+/* ─── Typography helpers ──────────────────────────────────────────── */
+.vdj-display { font-family: var(--font-display); letter-spacing: 0.05em; }
+.vdj-mono    { font-family: var(--font-mono); }
+.vdj-eyebrow {
+  font-family: var(--font-mono);
+  font-size: 0.625rem;
+  letter-spacing: 0.4em;
+  text-transform: uppercase;
+  color: var(--color-vdj-text-muted);
+}
+
+/* ─── CTA button — Music Streaming "play green" ───────────────────── */
+.vdj-cta {
+  @apply inline-flex items-center gap-2 px-4 py-2 rounded-full font-mono font-bold uppercase tracking-widest text-xs;
+  background: var(--color-vdj-cta);
+  color: #052e14;
+  box-shadow: 0 0 24px -4px color-mix(in oklab, var(--color-vdj-cta) 60%, transparent);
+  transition: transform 120ms ease, box-shadow 200ms ease, filter 200ms ease;
+}
+.vdj-cta:hover  { filter: brightness(1.08); box-shadow: 0 0 32px -2px color-mix(in oklab, var(--color-vdj-cta) 75%, transparent); }
+.vdj-cta:active { transform: scale(0.97); }
+
+/* Reduced motion respect */
+@media (prefers-reduced-motion: reduce) {
+  .vdj-shimmer,
+  .vdj-scanlines::before { animation: none; }
 }
