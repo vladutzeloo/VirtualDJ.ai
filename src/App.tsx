@@ -47,7 +47,9 @@ import { Vault } from './components/Vault';
 
 import { Logo } from './components/Logo';
 import { DeviceIdentity } from './components/DeviceIdentity';
+import { MotionControls } from './components/MotionControls';
 import { useDeviceTelemetry } from './hooks/useDeviceTelemetry';
+import { useMotionControls, vibrate } from './hooks/useMotionControls';
 
 const STATIONS = [
   { id: 'sw', label: 'Synthwave', sub: 'SYNTHWAVE', color: 'bg-pink-600/20 text-pink-400 border-pink-500/30' },
@@ -220,6 +222,7 @@ export default function App() {
         setLocalTracks(prev => prev.map(t => ({ ...t, isPlaying: t.id === track.id })));
         setUsage(p => ({ ...p, tracksPlayed: p.tracksPlayed + 1 }));
         addLog(track.agentLabel, `Playing: ${track.title}`, 'success');
+        vibrate([20, 30, 20]);
       })
       .catch(err => {
         addLog('SYSTEM', `Playback failed: ${err?.message ?? 'unknown error'}`, 'warn');
@@ -233,7 +236,40 @@ export default function App() {
     setLocalTracks(prev => prev.map(t => t.id === track.id ? { ...t, isPlaying: false } : t));
     setPlayback(p => ({ ...p, id: null }));
     addLog(track.agentLabel, `Paused: ${track.title}`, 'info');
+    vibrate(15);
   };
+
+  const { state: motionState, enable: enableMotion, disable: disableMotion } = useMotionControls({
+    onCrossfader: (value) =>
+      setMixerValues(prev => ({ ...prev, crossfader: Math.round(value) })),
+    onVolume: (value) =>
+      setMixerValues(prev => ({ ...prev, volume: Math.round(value) })),
+    onTempoDelta: (delta) =>
+      setMixerValues(prev => ({
+        ...prev,
+        tempo: Math.max(60, Math.min(200, Math.round(prev.tempo + delta * 0.6))),
+      })),
+    onShake: () => {
+      audioRef.current?.pause();
+      stopAllPlayingFlags();
+      setPlayback(p => ({ ...p, id: null }));
+      addLog('GYRO', 'Shake detected — emergency stop engaged.', 'warn');
+    },
+    onFlick: (dir) => {
+      addLog('GYRO', `Flick ${dir.toUpperCase()} — cycling layer focus.`, 'info');
+      vibrate(15);
+      if (dir === 'right' || dir === 'up') {
+        const playingIdx = tracks.findIndex(t => t.isPlaying);
+        const nextIdx = tracks.length === 0 ? -1 : playingIdx === -1 ? 0 : (playingIdx + 1) % tracks.length;
+        if (nextIdx >= 0) playTrack(tracks[nextIdx]);
+      } else {
+        audioRef.current?.pause();
+        stopAllPlayingFlags();
+        setPlayback(p => ({ ...p, id: null }));
+      }
+    },
+  });
+
 
   const fetchSuggestions = async (query: string) => {
     setLoadingSuggestions(true);
@@ -457,6 +493,9 @@ export default function App() {
             onLike={() => setUsage(prev => ({ ...prev, tracksLiked: prev.tracksLiked + 1 }))}
             telemetry={telemetry}
             onOpenDeviceIdentity={() => setIsDeviceIdentityOpen(true)}
+            motionState={motionState}
+            onEnableMotion={enableMotion}
+            onDisableMotion={disableMotion}
             isMobile={true}
           />
         </div>
@@ -526,6 +565,9 @@ function AppContent({
   onLike,
   telemetry,
   onOpenDeviceIdentity,
+  motionState,
+  onEnableMotion,
+  onDisableMotion,
   isMobile = false
 }: any) {
   return (
@@ -979,6 +1021,15 @@ function AppContent({
                   </div>
                </div>
 
+               <div className="px-6">
+                  <MotionControls
+                    state={motionState}
+                    onEnable={onEnableMotion}
+                    onDisable={onDisableMotion}
+                    onTestPulse={() => vibrate([10, 30, 60, 30, 10])}
+                  />
+               </div>
+
                <div className="px-6 flex flex-col gap-4">
                   <h3 className="text-xs font-mono font-black text-white/40 tracking-widest uppercase">Deck Status</h3>
                   <div className="grid grid-cols-2 gap-4">
@@ -1052,6 +1103,13 @@ function AppContent({
                 </div>
                 
                 <ControlDeck />
+
+                <MotionControls
+                  state={motionState}
+                  onEnable={onEnableMotion}
+                  onDisable={onDisableMotion}
+                  onTestPulse={() => vibrate([10, 30, 60, 30, 10])}
+                />
              </div>
           </div>
 
