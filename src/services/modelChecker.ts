@@ -13,8 +13,8 @@
 import { GoogleGenAI } from '@google/genai';
 import type { ProviderId } from './apiKeyManager';
 import { getApiKey, hasApiKey, markKeyUsed, PROVIDERS } from './apiKeyManager';
-import { getAnthropicClient } from './anthropicClient';
 import { getPreferredModel } from './modelCatalog';
+import { getLocalLlmConfig } from './localLlmService';
 import { recordUsage } from './usageTracker';
 
 export interface CheckResult {
@@ -70,25 +70,6 @@ const truncate = (text: string, max = 80): string =>
 
 // ─── Per-provider ping implementations ─────────────────────────────────────
 
-const pingAnthropic = async (model: string): Promise<string> => {
-  const client = getAnthropicClient();
-  const response = await client.messages.create({
-    model,
-    max_tokens: 16,
-    system: 'You are a health-check responder. Reply with one word.',
-    messages: [{ role: 'user', content: PING_PROMPT }],
-  });
-  recordUsage({
-    provider: 'anthropic',
-    model,
-    feature: PING_FEATURE,
-    inputTokens: response.usage?.input_tokens ?? 0,
-    outputTokens: response.usage?.output_tokens ?? 0,
-  });
-  const block = response.content.find((b) => b.type === 'text');
-  return block && 'text' in block ? block.text.trim() : '';
-};
-
 const pingGemini = async (model: string): Promise<string> => {
   const apiKey = getApiKey('gemini');
   if (!apiKey) throw new Error('No Gemini key configured.');
@@ -121,13 +102,18 @@ const pingOpenAICompatible = async (
   model: string,
   provider: ProviderId,
 ): Promise<string> => {
-  const response = await fetch(`${baseUrl}/chat/completions`, {
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    Accept: 'application/json',
+  };
+  // Local servers (Ollama, LM Studio, llama.cpp) usually run unauthenticated.
+  // Only attach the Bearer header when a key is actually configured so we
+  // don't trip auth middleware that interprets `Bearer ` as a malformed token.
+  if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
+
+  const response = await fetch(`${baseUrl.replace(/\/+$/, '')}/chat/completions`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Accept: 'application/json',
-      Authorization: `Bearer ${apiKey}`,
-    },
+    headers,
     body: JSON.stringify({
       model,
       messages: [
@@ -144,7 +130,7 @@ const pingOpenAICompatible = async (
     throw new Error(`${response.status} ${response.statusText}${detail ? ` — ${truncate(detail, 160)}` : ''}`);
   }
   const data = await response.json();
-  markKeyUsed(provider);
+  if (apiKey) markKeyUsed(provider);
   recordUsage({
     provider,
     model,
@@ -173,13 +159,24 @@ const pingOpenAI = async (model: string): Promise<string> => {
   return pingOpenAICompatible('https://api.openai.com/v1', apiKey, model, 'openai');
 };
 
+const pingLocal = async (model: string): Promise<string> => {
+  const cfg = getLocalLlmConfig();
+  // Local servers don't need an API key by default (Ollama, LM Studio).
+  // Use whatever Bearer the user stored in the vault under 'local' if any.
+  const apiKey = getApiKey('local') ?? '';
+  return pingOpenAICompatible(cfg.baseUrl, apiKey, model, 'local');
+};
+
 // ─── Public API ────────────────────────────────────────────────────────────
 
 export const checkProvider = async (provider: ProviderId): Promise<CheckResult> => {
   const model = getPreferredModel(provider);
   const start = performance.now();
 
-  if (!hasApiKey(provider)) {
+  // Local LLMs typically run without a key, so we skip the missing-key gate
+  // for the local provider and let the fetch surface a connection error
+  // instead. Cloud providers still require a key up-front.
+  if (provider !== 'local' && !hasApiKey(provider)) {
     const result: CheckResult = {
       provider,
       model,
@@ -197,9 +194,6 @@ export const checkProvider = async (provider: ProviderId): Promise<CheckResult> 
   try {
     let sample: string;
     switch (provider) {
-      case 'anthropic':
-        sample = await pingAnthropic(model);
-        break;
       case 'gemini':
         sample = await pingGemini(model);
         break;
@@ -211,6 +205,9 @@ export const checkProvider = async (provider: ProviderId): Promise<CheckResult> 
         break;
       case 'openai':
         sample = await pingOpenAI(model);
+        break;
+      case 'local':
+        sample = await pingLocal(model);
         break;
       default:
         throw new Error(`Unsupported provider: ${provider}`);
@@ -245,9 +242,15 @@ export const checkProvider = async (provider: ProviderId): Promise<CheckResult> 
   }
 };
 
-/** Run checks for every provider that currently has a configured key. */
+/**
+ * Run checks for every provider that's plausibly reachable: cloud providers
+ * with a stored key, plus the local LLM (which usually runs unauthenticated
+ * and surfaces a clearer error from the fetch itself if it isn't running).
+ */
 export const checkAllConfigured = async (): Promise<CheckResult[]> => {
-  const providers = (Object.keys(PROVIDERS) as ProviderId[]).filter(hasApiKey);
+  const providers = (Object.keys(PROVIDERS) as ProviderId[]).filter(
+    (p) => p === 'local' || hasApiKey(p),
+  );
   return Promise.all(providers.map(checkProvider));
 };
 

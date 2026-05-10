@@ -50,6 +50,13 @@ import {
   clearAllKeys,
 } from '../services/apiKeyManager';
 import {
+  getLocalLlmConfig,
+  setLocalLlmConfig,
+  subscribeLocalLlm,
+  DEFAULT_LOCAL_LLM_CONFIG,
+  type LocalLlmConfig,
+} from '../services/localLlmService';
+import {
   getUsage,
   subscribeUsage,
   clearUsage,
@@ -449,11 +456,99 @@ const Tabs = ({ theme, tab, setTab }: { theme: 'dark' | 'light'; tab: Tab; setTa
 
 const KeysPanel = ({ theme, keys }: { theme: 'dark' | 'light'; keys: KeyPreview[] }) => (
   <div className="space-y-3">
+    <LocalLlmCard theme={theme} />
     {keys.map(k => (
       <KeyCard key={k.provider} preview={k} theme={theme} />
     ))}
   </div>
 );
+
+// ─── Local LLM endpoint card ──────────────────────────────────────────────
+
+const LocalLlmCard = ({ theme }: { theme: 'dark' | 'light' }) => {
+  const [config, setConfig] = useState<LocalLlmConfig>(() => getLocalLlmConfig());
+  const [draftBaseUrl, setDraftBaseUrl] = useState(config.baseUrl);
+  const [savedFlash, setSavedFlash] = useState(false);
+
+  useEffect(() => {
+    return subscribeLocalLlm(() => {
+      const next = getLocalLlmConfig();
+      setConfig(next);
+      setDraftBaseUrl(next.baseUrl);
+    });
+  }, []);
+
+  const dirty = draftBaseUrl !== config.baseUrl;
+  const isDefault = config.baseUrl === DEFAULT_LOCAL_LLM_CONFIG.baseUrl;
+
+  const onSave = () => {
+    setLocalLlmConfig({ baseUrl: draftBaseUrl });
+    setSavedFlash(true);
+    setTimeout(() => setSavedFlash(false), 1500);
+  };
+
+  return (
+    <div className={`rounded-2xl border p-4 transition-all ${
+      theme === 'dark' ? 'bg-white/[0.03] border-white/10' : 'bg-slate-50 border-slate-200'
+    }`}>
+      <div className="flex items-start justify-between gap-3 mb-3">
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className={`text-sm font-display font-black tracking-tight ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>
+              Local LLM Endpoint
+            </span>
+            <span className={`text-[8px] font-mono font-black uppercase tracking-widest px-2 py-0.5 rounded-full border ${
+              isDefault
+                ? 'text-slate-500 border-white/10 bg-white/5'
+                : 'text-emerald-400 border-emerald-500/30 bg-emerald-500/10'
+            }`}>
+              {isDefault ? 'Default' : 'Custom'}
+            </span>
+            {savedFlash && (
+              <span className="text-[8px] font-mono font-black uppercase tracking-widest text-emerald-400 flex items-center gap-1">
+                <CheckCircle2 className="w-3 h-3" /> Saved
+              </span>
+            )}
+          </div>
+          <p className="text-[10px] font-mono text-slate-500 mt-0.5">
+            Fallback chain target. Any OpenAI-compatible server: Ollama, LM Studio, llama.cpp, vLLM.
+            Pick the model in the Models tab.
+          </p>
+        </div>
+      </div>
+
+      <div className="space-y-2">
+        <label className="block">
+          <span className="text-[9px] font-mono uppercase tracking-widest text-slate-500">Base URL</span>
+          <input
+            type="text"
+            value={draftBaseUrl}
+            onChange={e => setDraftBaseUrl(e.target.value)}
+            placeholder={DEFAULT_LOCAL_LLM_CONFIG.baseUrl}
+            className={`mt-1 w-full h-10 px-3 rounded-lg border bg-transparent font-mono text-xs focus:outline-none focus:ring-2 ${
+              theme === 'dark'
+                ? 'border-white/10 text-white focus:ring-jarvis-accent-cyan/40'
+                : 'border-slate-200 text-slate-900 focus:ring-jarvis-accent-cyan/30'
+            }`}
+          />
+        </label>
+        <div className="flex items-center justify-between gap-2 pt-1">
+          <span className="text-[9px] font-mono text-slate-600">
+            Ollama 11434 · LM Studio 1234 · llama.cpp 8080 · vLLM 8000
+          </span>
+          <button
+            onClick={onSave}
+            disabled={!dirty || !draftBaseUrl.trim()}
+            className="h-9 px-4 rounded-lg bg-jarvis-accent-cyan text-jarvis-bg font-mono font-black text-[10px] uppercase tracking-widest disabled:opacity-30 active:scale-95 transition flex items-center gap-1.5"
+          >
+            <Save className="w-3.5 h-3.5" />
+            Save
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
 
 const KeyCard = ({ preview, theme }: { preview: KeyPreview; theme: 'dark' | 'light' }) => {
   const [editing, setEditing] = useState(false);
@@ -670,7 +765,7 @@ const ImportPanel = ({ theme }: { theme: 'dark' | 'light' }) => {
         <textarea
           value={blob}
           onChange={e => setBlob(e.target.value)}
-          placeholder={`# Paste a .env-style block, e.g.\nGEMINI_API_KEY=AIza...\nANTHROPIC_API_KEY="sk-ant-..."`}
+          placeholder={`# Paste a .env-style block, e.g.\nGEMINI_API_KEY=AIza...\nNVIDIA_API_KEY="nvapi-..."\nLOCAL_LLM_API_KEY="optional-bearer-for-vllm"`}
           rows={6}
           className={`w-full rounded-lg border bg-transparent font-mono text-[11px] p-3 focus:outline-none focus:ring-2 ${
             theme === 'dark'
@@ -680,7 +775,7 @@ const ImportPanel = ({ theme }: { theme: 'dark' | 'light' }) => {
         />
         <div className="flex items-center justify-between mt-3">
           <span className="text-[9px] font-mono text-slate-500 uppercase tracking-widest">
-            Recognised: GEMINI_API_KEY · ANTHROPIC_API_KEY · KIMI_API_KEY · OPENAI_API_KEY · NVIDIA_API_KEY
+            Recognised: GEMINI_API_KEY · KIMI_API_KEY · OPENAI_API_KEY · NVIDIA_API_KEY · LOCAL_LLM_API_KEY
           </span>
           <button
             onClick={onImport}
@@ -1170,7 +1265,7 @@ const WebhookRow = ({
 
 // ─── Models panel (LLM checker + selector) ───────────────────────────────
 
-const PROVIDER_ORDER: ProviderId[] = ['anthropic', 'gemini', 'nvidia', 'kimi', 'openai'];
+const PROVIDER_ORDER: ProviderId[] = ['nvidia', 'kimi', 'gemini', 'openai', 'local'];
 
 const ModelsPanel = ({ theme, keys }: { theme: 'dark' | 'light'; keys: KeyPreview[] }) => {
   const [results, setResults] = useState<Partial<Record<ProviderId, CheckResult>>>(
@@ -1205,8 +1300,14 @@ const ModelsPanel = ({ theme, keys }: { theme: 'dark' | 'light'; keys: KeyPrevie
     }
   };
 
+  // Local servers run without a Bearer in the common case, so we always
+  // include 'local' in batch checks; the connection error (if any) is
+  // surfaced from the fetch itself rather than a missing-key gate.
+  const isCheckable = (p: ProviderId) =>
+    p === 'local' || keyByProvider[p]?.source !== 'missing';
+
   const onCheckAll = async () => {
-    const configured = PROVIDER_ORDER.filter(p => keyByProvider[p]?.source !== 'missing');
+    const configured = PROVIDER_ORDER.filter(isCheckable);
     if (configured.length === 0) return;
     setBusy('all');
     try {
@@ -1216,7 +1317,7 @@ const ModelsPanel = ({ theme, keys }: { theme: 'dark' | 'light'; keys: KeyPrevie
     }
   };
 
-  const configuredCount = PROVIDER_ORDER.filter(p => keyByProvider[p]?.source !== 'missing').length;
+  const configuredCount = PROVIDER_ORDER.filter(isCheckable).length;
 
   return (
     <div className="space-y-3">
@@ -1280,7 +1381,26 @@ const ProviderModelsCard = ({
   const meta = PROVIDERS[provider];
   const models = getModelsForProvider(provider);
   const selected = getPreferredModel(provider);
-  const hasKey = preview && preview.source !== 'missing';
+  const isLocal = provider === 'local';
+  const hasKey = Boolean(preview && preview.source !== 'missing');
+  // Local servers usually run without a key, so a missing Bearer is normal —
+  // don't gate the Check button on it. Cloud providers still require a key.
+  const checkEnabled = isLocal || hasKey;
+  // For local, the catalog is a starter list; users may run any model name
+  // (custom Ollama tags, fine-tunes, etc). Show a free-form input alongside
+  // the radio list so they can enter anything.
+  const isCustomLocal = isLocal && !models.some((m) => m.id === selected);
+  const [customModel, setCustomModel] = useState(isCustomLocal ? selected : '');
+
+  useEffect(() => {
+    if (isCustomLocal) setCustomModel(selected);
+  }, [selected, isCustomLocal]);
+
+  const onSaveCustom = () => {
+    const trimmed = customModel.trim();
+    if (!trimmed) return;
+    setPreferredModel('local', trimmed);
+  };
 
   const statusLabel = !result
     ? 'Untested'
@@ -1307,7 +1427,7 @@ const ProviderModelsCard = ({
               {result?.ok ? <Check className="w-2.5 h-2.5 inline mr-0.5" /> : null}
               {statusLabel}
             </span>
-            {!hasKey && (
+            {!hasKey && !isLocal && (
               <span className="text-[8px] font-mono font-black uppercase tracking-widest px-2 py-0.5 rounded-full border text-amber-400 border-amber-500/30 bg-amber-500/10">
                 No key
               </span>
@@ -1328,9 +1448,15 @@ const ProviderModelsCard = ({
         </div>
         <button
           onClick={onCheck}
-          disabled={busy || !hasKey}
+          disabled={busy || !checkEnabled}
           className="px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-[10px] font-mono font-black uppercase tracking-widest text-white hover:bg-white/10 disabled:opacity-30 active:scale-95 transition flex items-center gap-1.5 shrink-0"
-          title={hasKey ? 'Run live ping' : 'Add a key to enable checks'}
+          title={
+            isLocal
+              ? 'Ping the configured local endpoint'
+              : hasKey
+                ? 'Run live ping'
+                : 'Add a key to enable checks'
+          }
         >
           <Gauge className={`w-3.5 h-3.5 ${busy ? 'animate-pulse' : ''}`} />
           {busy ? 'Pinging…' : 'Check'}
@@ -1347,6 +1473,54 @@ const ProviderModelsCard = ({
             onSelect={() => setPreferredModel(provider, model.id)}
           />
         ))}
+        {isLocal && (
+          <div className={`rounded-xl border px-3 py-2 ${
+            isCustomLocal
+              ? 'border-jarvis-accent-cyan/60 bg-jarvis-accent-cyan/5'
+              : theme === 'dark'
+                ? 'border-white/5 bg-white/[0.02]'
+                : 'border-slate-200 bg-white'
+          }`}>
+            <div className="flex items-center gap-2">
+              <div className={`w-3.5 h-3.5 rounded-full border flex items-center justify-center shrink-0 ${
+                isCustomLocal
+                  ? 'border-jarvis-accent-cyan bg-jarvis-accent-cyan/20'
+                  : 'border-white/20'
+              }`}>
+                {isCustomLocal && <div className="w-1.5 h-1.5 rounded-full bg-jarvis-accent-cyan" />}
+              </div>
+              <span className={`text-xs font-display font-black tracking-tight ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>
+                Custom model
+              </span>
+            </div>
+            <p className="text-[10px] font-mono text-slate-500 mt-0.5">
+              Paste any tag your local server has loaded (e.g. <span className="text-slate-400">qwen2.5:14b</span>, <span className="text-slate-400">deepseek-r1:32b</span>).
+            </p>
+            <div className="mt-2 flex items-center gap-2">
+              <input
+                type="text"
+                value={customModel}
+                onChange={(e) => setCustomModel(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') onSaveCustom();
+                }}
+                placeholder="model:tag"
+                className={`flex-1 h-9 px-3 rounded-lg border bg-transparent font-mono text-xs focus:outline-none focus:ring-2 ${
+                  theme === 'dark'
+                    ? 'border-white/10 text-white focus:ring-jarvis-accent-cyan/40'
+                    : 'border-slate-200 text-slate-900 focus:ring-jarvis-accent-cyan/30'
+                }`}
+              />
+              <button
+                onClick={onSaveCustom}
+                disabled={!customModel.trim() || customModel.trim() === selected}
+                className="h-9 px-3 rounded-lg bg-jarvis-accent-cyan text-jarvis-bg font-mono font-black text-[10px] uppercase tracking-widest disabled:opacity-30 active:scale-95 transition"
+              >
+                Use
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

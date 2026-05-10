@@ -7,7 +7,7 @@
  * in localStorage from leaking secrets.
  */
 
-export type ProviderId = 'gemini' | 'anthropic' | 'kimi' | 'openai' | 'nvidia';
+export type ProviderId = 'gemini' | 'kimi' | 'openai' | 'nvidia' | 'local';
 
 export interface ProviderMeta {
   id: ProviderId;
@@ -28,15 +28,6 @@ export const PROVIDERS: Record<ProviderId, ProviderMeta> = {
     consoleUrl: 'https://aistudio.google.com/app/apikey',
     keyPrefix: 'AIza',
     description: 'Music discovery, search grounding, and album art generation.',
-  },
-  anthropic: {
-    id: 'anthropic',
-    name: 'Anthropic Claude',
-    shortName: 'Claude',
-    envVar: 'ANTHROPIC_API_KEY',
-    consoleUrl: 'https://console.anthropic.com/settings/keys',
-    keyPrefix: 'sk-ant-',
-    description: 'DJ skills: setlist curator, crowd reader, mix coach.',
   },
   kimi: {
     id: 'kimi',
@@ -63,7 +54,15 @@ export const PROVIDERS: Record<ProviderId, ProviderMeta> = {
     envVar: 'NVIDIA_API_KEY',
     consoleUrl: 'https://build.nvidia.com/explore/discover',
     keyPrefix: 'nvapi-',
-    description: 'NVIDIA NIM inference (Llama, Nemotron, Mixtral) via OpenAI-compatible endpoint.',
+    description: 'Primary AI for DJ skills + taste analysis (Llama, Nemotron, Mixtral) via OpenAI-compatible endpoint.',
+  },
+  local: {
+    id: 'local',
+    name: 'Local LLM',
+    shortName: 'Local',
+    envVar: 'LOCAL_LLM_API_KEY',
+    consoleUrl: 'https://ollama.com/download',
+    description: 'Optional Bearer token for an OpenAI-compatible local endpoint (Ollama, LM Studio, llama.cpp). Configure the base URL and model in the Local LLM card.',
   },
 };
 
@@ -243,7 +242,7 @@ export interface ImportReport {
 /**
  * Bulk import keys from a .env-style blob. Lines look like
  *   GEMINI_API_KEY=AIza...
- *   ANTHROPIC_API_KEY="sk-ant-..."
+ *   NVIDIA_API_KEY="nvapi-..."
  * Quoted values, comments (# ...), and blank lines are tolerated.
  */
 export const importFromEnvBlob = (blob: string): ImportReport => {

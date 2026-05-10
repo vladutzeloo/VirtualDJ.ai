@@ -6,9 +6,8 @@
  * Mixtral, Qwen and others — see https://build.nvidia.com.
  *
  * The browser calls the endpoint directly with the user's nvapi-* key.
- * As with the Anthropic browser-side client, this is gated behind the
- * Neural Vault and treated as user-authorized — never store a server-only
- * NVIDIA key in here.
+ * The key is gated behind the WebAuthn-protected Neural Vault and treated
+ * as user-authorized — never store a server-only NVIDIA key in here.
  */
 
 import { getApiKey, hasApiKey, markKeyUsed } from './apiKeyManager';
@@ -115,7 +114,7 @@ export const runNvidiaChat = async ({
 
 /**
  * Run an NVIDIA chat call expecting a JSON object response. Strips ```json
- * fences and parses defensively, mirroring the Claude/Gemini service style.
+ * fences and parses defensively, mirroring the Kimi/Gemini service style.
  */
 export const runNvidiaJson = async <T = unknown>(
   options: NvidiaChatOptions,

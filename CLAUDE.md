@@ -7,9 +7,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 VirtualDJ.AI is a professional AI-powered DJ workstation delivered as a single-page React app. It pairs a 3D turntable UI (Three.js / React Three Fiber) with multi-provider AI agents:
 
 - **Google Gemini** with Google Search grounding — live track discovery and recommendations.
-- **Anthropic Claude** — DJ skill agents (setlist curator, crowd reader, mix coach).
-- **Moonshot Kimi** — auxiliary OpenAI-compatible chat surface.
-- **NVIDIA NIM** — OpenAI-compatible Llama / Nemotron / Mixtral inference (`nvidiaService`).
+- **NVIDIA NIM** — primary AI for DJ skills + taste analysis. OpenAI-compatible Llama / Nemotron / Mixtral inference (`nvidiaService`).
+- **Moonshot Kimi** — second link in the AI provider chain (`kimiService`).
+- **Local LLM fallback** — generic OpenAI-compatible endpoint (Ollama / LM Studio / llama.cpp / vLLM) used when no cloud key is set or all cloud providers fail (`localLlmService`).
 - **MediaPipe Tasks Vision** — gesture/vision input.
 - **WebAuthn (SimpleWebAuthn)** — Neural Vault biometric auth.
 
@@ -35,9 +35,9 @@ Secrets are loaded by Vite from `.env.local` and injected into the bundle via `d
 Required / optional keys (see `.env.example`):
 
 - `GEMINI_API_KEY` — required for `musicService` (track recommendations + Google Search grounding).
-- `ANTHROPIC_API_KEY` — required for `claudeAgentService` and `preferenceAgentService` (DJ skills + taste analysis).
-- `KIMI_API_KEY` — optional, Moonshot AI.
-- `NVIDIA_API_KEY` — optional, NVIDIA NIM (`nvapi-…`) for `nvidiaService` (OpenAI-compatible Llama/Nemotron/Mixtral).
+- `NVIDIA_API_KEY` — primary key for `djSkillService` and `preferenceAgentService` (DJ skills + taste analysis). NVIDIA NIM (`nvapi-…`), OpenAI-compatible.
+- `KIMI_API_KEY` — second link in the AI provider chain (Moonshot, OpenAI-compatible).
+- Local LLM endpoint — final fallback when no cloud key is configured. Base URL + model are stored in localStorage and edited from the Neural Vault, **not** via env vars (defaults to `http://localhost:11434/v1` for Ollama).
 - `OPENAI_API_KEY` — optional, recognized by the Neural Vault for future drop-in use.
 - `APP_URL` — auto-injected by AI Studio at runtime (Cloud Run URL).
 
@@ -71,9 +71,12 @@ src/
 │   ├── apiKeyManager.ts        # Vault-backed key resolution (prefer over process.env)
 │   ├── usageTracker.ts         # Token / cost ledger surfaced in the Neural Vault
 │   ├── musicService.ts         # Gemini + Google Search grounding
-│   ├── claudeAgentService.ts   # Anthropic SDK, DJ_SKILLS registry
-│   ├── preferenceAgentService.ts # Anthropic taste-profile analyzer
+│   ├── aiProviderChain.ts      # NVIDIA → Kimi → local LLM fallback orchestrator
+│   ├── djSkillService.ts       # DJ_SKILLS registry on top of the chain
+│   ├── preferenceAgentService.ts # Taste-profile analyzer on top of the chain
 │   ├── nvidiaService.ts        # NVIDIA NIM (OpenAI-compatible) chat completions
+│   ├── kimiService.ts          # Moonshot Kimi (OpenAI-compatible) chat completions
+│   ├── localLlmService.ts      # Generic OpenAI-compatible local endpoint (Ollama, LM Studio, llama.cpp, vLLM)
 │   ├── imageService.ts         # AI artwork / avatar generation
 │   ├── audiusService.ts        # Audius public discovery + streaming
 │   ├── soundService.ts         # Local SFX / notification cues
@@ -96,20 +99,24 @@ Each service in `src/services/` lazy-initializes its SDK client inside a `getCli
 1. **Resolve keys via `apiKeyManager.getApiKey('<provider>')`** — never read `process.env` directly. The manager unifies vault-stored keys + env fallback and emits a `markKeyUsed` ping for the UI.
 2. Lazy singleton client; rebuild the client when the resolved key changes.
 3. Strongly-typed request/response interfaces exported alongside the function.
-4. Robust JSON extraction — models often wrap output in ```json fences. See `extractJsonArray` in `musicService.ts` and the regex strip in `claudeAgentService.ts` / `nvidiaService.ts`.
+4. Robust JSON extraction — models often wrap output in ```json fences. See `extractJsonArray` in `musicService.ts` and the regex strip in `nvidiaService.ts` / `kimiService.ts` / `localLlmService.ts`.
 5. Record cost via `usageTracker.recordUsage({ provider, model, feature, inputTokens, outputTokens })` after every completion.
 6. Errors logged with the raw response, then re-thrown with a user-friendly message.
 
-### Claude SDK usage
+### AI provider chain
 
-`claudeAgentService.ts` uses `@anthropic-ai/sdk` directly from the browser with `dangerouslyAllowBrowser: true`. The default model is `claude-sonnet-4-6`. The DJ skill registry (`DJ_SKILLS`) is the single place to add or modify Claude personas; each skill owns its system prompt and expected JSON schema.
+DJ skills and the taste-profile analyzer route through `aiProviderChain.ts`, which tries providers in order and falls through on failure:
 
-When upgrading Claude models, refer to model IDs documented in this repo's environment notes — current defaults: Opus 4.7 (`claude-opus-4-7`), Sonnet 4.6 (`claude-sonnet-4-6`), Haiku 4.5 (`claude-haiku-4-5-20251001`).
+1. **NVIDIA NIM** (primary) — `nvidiaService` against `https://integrate.api.nvidia.com/v1/chat/completions`. Default model: `meta/llama-3.1-70b-instruct`.
+2. **Moonshot Kimi** — `kimiService` against `https://api.moonshot.ai/v1/chat/completions`. Default model: `moonshot-v1-32k`.
+3. **Local LLM** (final fallback) — `localLlmService` against any OpenAI-compatible endpoint. Default: `http://localhost:11434/v1` (Ollama) with model `llama3.2`. Base URL + model are user-configurable from the Neural Vault; an optional Bearer token is stored under provider id `local` in `apiKeyManager`.
+
+Use `runAiChat` for raw text and `runAiJson<T>` for JSON. Both return the provider/model that actually served the request so you can show it in the UI. Add new pricing rows to `MODEL_PRICING` in `usageTracker.ts` when you wire additional cloud models.
 
 ### NVIDIA NIM usage
 
 `nvidiaService.ts` calls the OpenAI-compatible endpoint at
-`https://integrate.api.nvidia.com/v1/chat/completions` directly via `fetch` (no SDK dependency). The default model is `meta/llama-3.1-70b-instruct`. Use `runNvidiaChat({ model, messages })` for raw text or `runNvidiaJson({ ... })` for JSON-mode-style helpers. Add new model pricing entries to `MODEL_PRICING` in `usageTracker.ts` when you wire up additional NVIDIA models.
+`https://integrate.api.nvidia.com/v1/chat/completions` directly via `fetch` (no SDK dependency). The default model is `meta/llama-3.1-70b-instruct`. Use `runNvidiaChat({ model, messages })` for raw text or `runNvidiaJson({ ... })` for JSON-mode-style helpers — though most callers should prefer `aiProviderChain` so the Kimi/local fallbacks engage automatically.
 
 ### 3D / Three.js
 

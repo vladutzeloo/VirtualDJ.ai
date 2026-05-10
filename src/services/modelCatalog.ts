@@ -4,7 +4,7 @@
  * Static catalog of LLM models available per provider (id, label, context window,
  * capability hints) plus a small persistent store for the user's preferred model
  * per provider. Services read the preference via `getPreferredModel(provider)`
- * so the choice surfaces in `claudeAgentService`, `nvidiaService`, etc.
+ * so the choice surfaces in `djSkillService`, `nvidiaService`, etc.
  *
  * Pricing for each model id is owned by `usageTracker.MODEL_PRICING` — keep the
  * two in sync when you add a model here.
@@ -59,33 +59,6 @@ export const MODEL_CATALOG: ModelEntry[] = [
     description: 'Image generation endpoint (album art / avatars).',
     contextWindow: 32_000,
     capabilities: ['image-gen'],
-  },
-
-  // ─── Anthropic Claude ───────────────────────────────────────────────────
-  {
-    id: 'claude-sonnet-4-6',
-    provider: 'anthropic',
-    label: 'Claude Sonnet 4.6',
-    description: 'Default for DJ skills — balanced quality and cost.',
-    contextWindow: 200_000,
-    capabilities: ['chat', 'json', 'vision', 'long-context', 'reasoning'],
-    default: true,
-  },
-  {
-    id: 'claude-opus-4-7',
-    provider: 'anthropic',
-    label: 'Claude Opus 4.7',
-    description: 'Highest quality — use for crowd reads and tricky setlist work.',
-    contextWindow: 200_000,
-    capabilities: ['chat', 'json', 'vision', 'long-context', 'reasoning'],
-  },
-  {
-    id: 'claude-haiku-4-5',
-    provider: 'anthropic',
-    label: 'Claude Haiku 4.5',
-    description: 'Cheapest, fastest Claude tier — good for high-frequency hints.',
-    contextWindow: 200_000,
-    capabilities: ['chat', 'json', 'vision'],
   },
 
   // ─── Moonshot Kimi ──────────────────────────────────────────────────────
@@ -168,6 +141,52 @@ export const MODEL_CATALOG: ModelEntry[] = [
     contextWindow: 64_000,
     capabilities: ['chat', 'json'],
   },
+
+  // ─── Local LLM (Ollama / LM Studio / llama.cpp / vLLM) ──────────────────
+  // These are common Ollama tags. Users running a model that isn't listed
+  // here can type any string into the Local LLM card — `setPreferredModel`
+  // accepts arbitrary ids for the local provider.
+  {
+    id: 'llama3.2',
+    provider: 'local',
+    label: 'Llama 3.2 (Ollama)',
+    description: 'Default Ollama tag — small, fast, runs on most laptops.',
+    contextWindow: 128_000,
+    capabilities: ['chat', 'json'],
+    default: true,
+  },
+  {
+    id: 'llama3.1',
+    provider: 'local',
+    label: 'Llama 3.1',
+    description: 'Larger Llama with stronger reasoning.',
+    contextWindow: 128_000,
+    capabilities: ['chat', 'json', 'long-context'],
+  },
+  {
+    id: 'qwen2.5',
+    provider: 'local',
+    label: 'Qwen 2.5',
+    description: 'Strong open model from Alibaba.',
+    contextWindow: 32_000,
+    capabilities: ['chat', 'json'],
+  },
+  {
+    id: 'mistral',
+    provider: 'local',
+    label: 'Mistral',
+    description: 'Small, fast Mistral 7B.',
+    contextWindow: 32_000,
+    capabilities: ['chat', 'json'],
+  },
+  {
+    id: 'gemma3',
+    provider: 'local',
+    label: 'Gemma 3',
+    description: 'Google open model — small footprint.',
+    contextWindow: 8_000,
+    capabilities: ['chat', 'json'],
+  },
 ];
 
 export const getModelsForProvider = (provider: ProviderId): ModelEntry[] =>
@@ -215,21 +234,35 @@ export const subscribeModelPrefs = (listener: Listener): (() => void) => {
 
 /**
  * Returns the user's preferred model for a provider, falling back to the
- * provider's default when nothing is stored or the stored id is unknown.
+ * provider's default when nothing is stored. For the `local` provider any
+ * stored string is accepted (users can type custom Ollama tags); for cloud
+ * providers an unrecognised id falls back to the catalog default.
  */
 export const getPreferredModel = (provider: ProviderId): string => {
   const stored = readPrefs()[provider];
-  if (stored && getModel(stored)?.provider === provider) return stored;
+  if (stored) {
+    if (provider === 'local') return stored;
+    if (getModel(stored)?.provider === provider) return stored;
+  }
   return getDefaultModel(provider).id;
 };
 
 export const setPreferredModel = (provider: ProviderId, modelId: string): void => {
-  const entry = getModel(modelId);
-  if (!entry || entry.provider !== provider) {
-    throw new Error(`Model ${modelId} is not registered for provider ${provider}`);
+  const trimmed = modelId.trim();
+  if (!trimmed) throw new Error('Model id cannot be empty');
+
+  // The local provider runs any model the user has pulled into Ollama / LM
+  // Studio / etc., so we don't gate on the catalog. Cloud providers stay
+  // strict so a typo can't silently route to a non-existent endpoint.
+  if (provider !== 'local') {
+    const entry = getModel(trimmed);
+    if (!entry || entry.provider !== provider) {
+      throw new Error(`Model ${trimmed} is not registered for provider ${provider}`);
+    }
   }
+
   const map = readPrefs();
-  map[provider] = modelId;
+  map[provider] = trimmed;
   writePrefs(map);
 };
 
@@ -241,8 +274,8 @@ export const resetPreferredModel = (provider: ProviderId): void => {
 
 export const getAllPreferredModels = (): Record<ProviderId, string> => ({
   gemini: getPreferredModel('gemini'),
-  anthropic: getPreferredModel('anthropic'),
   kimi: getPreferredModel('kimi'),
   openai: getPreferredModel('openai'),
   nvidia: getPreferredModel('nvidia'),
+  local: getPreferredModel('local'),
 });
