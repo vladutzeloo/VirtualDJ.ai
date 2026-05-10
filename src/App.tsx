@@ -36,6 +36,7 @@ import { StatItem } from './components/StatItem';
 import { MixerKnob } from './components/MixerKnob';
 import { TrackLayer, TrackData } from './components/TrackLayer';
 import { searchPlayableTracks, TrackRecommendation } from './services/musicService';
+import { dispatch as dispatchWebhook } from './services/webhookService';
 import { PlaylistPanel } from './components/PlaylistPanel';
 import { generateTrackArtwork, generateAgentAvatar } from './services/imageService';
 import { JulesAgent } from './components/JulesAgent';
@@ -375,6 +376,13 @@ export default function App() {
         });
       }
       addLog('TASTE-AGENT', `Liked "${rec.title}". Updating taste profile.`, 'success');
+      dispatchWebhook('track.liked', {
+        id: rec.id,
+        title: rec.title,
+        artist: rec.artist,
+        genre: rec.genre,
+        reason,
+      });
     } else {
       removePref('liked', rec.id);
       upsertPref('disliked', updated);
@@ -387,6 +395,13 @@ export default function App() {
         );
       }
       addLog('TASTE-AGENT', `Disliked "${rec.title}". Updating taste profile.`, 'warn');
+      dispatchWebhook('track.disliked', {
+        id: rec.id,
+        title: rec.title,
+        artist: rec.artist,
+        genre: rec.genre,
+        reason,
+      });
     }
   };
 
@@ -400,6 +415,12 @@ export default function App() {
       prev.map(s => (s.id === rec.id ? { ...s, inPlaylist: true } : s)),
     );
     addLog('PLAYLIST', `Sent "${rec.title}" to playlist.`, 'success');
+    dispatchWebhook('track.added_to_playlist', {
+      id: rec.id,
+      title: rec.title,
+      artist: rec.artist,
+      genre: rec.genre,
+    });
   };
 
   const onLikeIncrement = () => {
@@ -528,6 +549,14 @@ export default function App() {
         awardCredits(25);
         addLog(track.agentLabel, `Playing: ${track.title}`, 'success');
         vibrate([20, 30, 20]);
+        dispatchWebhook('track.played', {
+          id: track.id,
+          title: track.title,
+          artist: track.artist,
+          agentLabel: track.agentLabel,
+          duration: track.duration,
+          hasStream: Boolean(track.audioUrl),
+        });
       })
       .catch(err => {
         addLog('SYSTEM', `Playback failed: ${err?.message ?? 'unknown error'}`, 'warn');
@@ -542,6 +571,12 @@ export default function App() {
     setPlayback(p => ({ ...p, id: null }));
     addLog(track.agentLabel, `Paused: ${track.title}`, 'info');
     vibrate(15);
+    dispatchWebhook('track.paused', {
+      id: track.id,
+      title: track.title,
+      artist: track.artist,
+      agentLabel: track.agentLabel,
+    });
   };
 
   const { state: motionState, enable: enableMotion, disable: disableMotion } = useMotionControls({
@@ -619,6 +654,26 @@ export default function App() {
       message: 'Neural curation complete.',
       type: 'success',
       agent: 'ANALYST',
+    });
+    dispatchWebhook('search.completed', {
+      query,
+      mode: searchMode,
+      count: recs.length,
+    });
+    dispatchWebhook('recommendations.received', {
+      query,
+      mode: searchMode,
+      tracks: recs.map(r => ({
+        id: r.id,
+        title: r.title,
+        artist: r.artist,
+        genre: r.genre,
+        agentLabel: r.agentLabel,
+        confidence: r.confidence,
+        tags: r.tags,
+        previewUrl: r.previewUrl,
+        streamUrl: r.streamUrl,
+      })),
     });
 
     // Background image generation using Gemini 3.1 Flash Image (Banana 2).
@@ -713,6 +768,14 @@ export default function App() {
       };
       setTracks(prev => [...prev, newTrack]);
       setIsDeploying(false);
+      dispatchWebhook('track.deployed', {
+        id: newTrack.id,
+        title: newTrack.title,
+        artist: newTrack.artist,
+        agentLabel: newTrack.agentLabel,
+        playable,
+        notes: notes ?? undefined,
+      });
       if (notes) addLog(rec.agentLabel, `Notes integration: ${notes.slice(0, 50)}...`, 'success');
       addLog(
         rec.agentLabel,

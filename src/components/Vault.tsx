@@ -22,6 +22,10 @@ import {
   Zap,
   Copy,
   RefreshCcw,
+  Webhook,
+  Send,
+  Power,
+  PowerOff,
 } from 'lucide-react';
 import {
   authenticateBiometric,
@@ -49,6 +53,21 @@ import {
   formatTokens,
   UsageSummary,
 } from '../services/usageTracker';
+import {
+  WEBHOOK_EVENTS,
+  EVENT_LABELS,
+  WebhookConfig,
+  WebhookDelivery,
+  WebhookEvent,
+  addWebhook,
+  updateWebhook,
+  removeWebhook,
+  listWebhooks,
+  listDeliveries,
+  clearDeliveries,
+  subscribeWebhooks,
+  testWebhook,
+} from '../services/webhookService';
 
 interface VaultProps {
   isOpen: boolean;
@@ -56,7 +75,7 @@ interface VaultProps {
   theme: 'dark' | 'light';
 }
 
-type Tab = 'keys' | 'import' | 'usage';
+type Tab = 'keys' | 'import' | 'usage' | 'webhooks';
 
 export const Vault = ({ isOpen, onClose, theme }: VaultProps) => {
   const [isUnlocked, setIsUnlocked] = useState(false);
@@ -69,11 +88,15 @@ export const Vault = ({ isOpen, onClose, theme }: VaultProps) => {
   const [tab, setTab] = useState<Tab>('keys');
   const [keys, setKeys] = useState<KeyPreview[]>(previewAll());
   const [usage, setUsage] = useState<UsageSummary>(() => getUsage());
+  const [webhooks, setWebhooks] = useState<WebhookConfig[]>(() => listWebhooks());
+  const [deliveries, setDeliveries] = useState<WebhookDelivery[]>(() => listDeliveries());
 
   useEffect(() => {
     if (!isOpen) return;
     setKeys(previewAll());
     setUsage(getUsage());
+    setWebhooks(listWebhooks());
+    setDeliveries(listDeliveries());
     checkBiometricSupport().then(({ platformAvailable }) => {
       setHasPlatformAuth(platformAvailable);
       setRegistered(isVaultRegistered());
@@ -83,9 +106,14 @@ export const Vault = ({ isOpen, onClose, theme }: VaultProps) => {
   useEffect(() => {
     const unsubKeys = subscribeKeys(() => setKeys(previewAll()));
     const unsubUsage = subscribeUsage(() => setUsage(getUsage()));
+    const unsubHooks = subscribeWebhooks(() => {
+      setWebhooks(listWebhooks());
+      setDeliveries(listDeliveries());
+    });
     return () => {
       unsubKeys();
       unsubUsage();
+      unsubHooks();
     };
   }, []);
 
@@ -192,6 +220,9 @@ export const Vault = ({ isOpen, onClose, theme }: VaultProps) => {
               {tab === 'keys' && <KeysPanel theme={theme} keys={keys} />}
               {tab === 'import' && <ImportPanel theme={theme} />}
               {tab === 'usage' && <UsagePanel theme={theme} usage={usage} />}
+              {tab === 'webhooks' && (
+                <WebhooksPanel theme={theme} webhooks={webhooks} deliveries={deliveries} />
+              )}
             </div>
           </>
         )}
@@ -208,9 +239,10 @@ export const Vault = ({ isOpen, onClose, theme }: VaultProps) => {
           {isUnlocked && (
             <button
               onClick={() => {
-                if (confirm('Wipe all stored API keys and usage history?')) {
+                if (confirm('Wipe all stored API keys, usage history, and webhook deliveries?')) {
                   clearAllKeys();
                   clearUsage();
+                  clearDeliveries();
                 }
               }}
               className="text-[9px] font-mono text-slate-500 hover:text-red-400 uppercase tracking-widest"
@@ -371,6 +403,7 @@ const Tabs = ({ theme, tab, setTab }: { theme: 'dark' | 'light'; tab: Tab; setTa
     { id: 'keys', label: 'Keys', icon: Key },
     { id: 'import', label: 'Import', icon: Upload },
     { id: 'usage', label: 'Usage', icon: Activity },
+    { id: 'webhooks', label: 'Hooks', icon: Webhook },
   ];
   return (
     <div className={`flex border-b px-4 ${theme === 'dark' ? 'border-white/5' : 'border-slate-100'}`}>
@@ -783,6 +816,334 @@ const UsagePanel = ({ theme, usage }: { theme: 'dark' | 'light'; usage: UsageSum
           ))}
         </div>
       </div>
+    </div>
+  );
+};
+
+// ─── Webhooks panel ───────────────────────────────────────────────────────
+
+interface WebhooksPanelProps {
+  theme: 'dark' | 'light';
+  webhooks: WebhookConfig[];
+  deliveries: WebhookDelivery[];
+}
+
+const WebhooksPanel = ({ theme, webhooks, deliveries }: WebhooksPanelProps) => {
+  const [adding, setAdding] = useState(false);
+  const [draftUrl, setDraftUrl] = useState('');
+  const [draftLabel, setDraftLabel] = useState('');
+  const [draftSecret, setDraftSecret] = useState('');
+  const [draftEvents, setDraftEvents] = useState<WebhookEvent[]>([...WEBHOOK_EVENTS]);
+  const [error, setError] = useState<string | null>(null);
+  const [testingId, setTestingId] = useState<string | null>(null);
+
+  const recentDeliveries = useMemo(
+    () => [...deliveries].reverse().slice(0, 20),
+    [deliveries],
+  );
+
+  const toggleDraftEvent = (event: WebhookEvent) => {
+    setDraftEvents(prev =>
+      prev.includes(event) ? prev.filter(e => e !== event) : [...prev, event],
+    );
+  };
+
+  const onSave = () => {
+    setError(null);
+    try {
+      addWebhook({
+        url: draftUrl,
+        label: draftLabel || undefined,
+        secret: draftSecret || undefined,
+        events: draftEvents,
+      });
+      setDraftUrl('');
+      setDraftLabel('');
+      setDraftSecret('');
+      setDraftEvents([...WEBHOOK_EVENTS]);
+      setAdding(false);
+    } catch (e: any) {
+      setError(e?.message ?? 'Could not save webhook.');
+    }
+  };
+
+  const onTest = async (id: string) => {
+    setTestingId(id);
+    try {
+      await testWebhook(id);
+    } finally {
+      setTestingId(null);
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className={`rounded-2xl border p-4 ${theme === 'dark' ? 'bg-white/[0.03] border-white/10' : 'bg-slate-50 border-slate-200'}`}>
+        <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center gap-2">
+            <Webhook className="w-4 h-4 text-jarvis-accent-cyan" />
+            <span className="text-xs font-display font-black uppercase tracking-widest text-white">
+              Outgoing Webhooks
+            </span>
+          </div>
+          {!adding && (
+            <button
+              onClick={() => setAdding(true)}
+              className="px-3 py-1.5 rounded-lg bg-jarvis-accent-cyan text-jarvis-bg font-mono font-black text-[9px] uppercase tracking-widest active:scale-95 transition flex items-center gap-1.5"
+            >
+              <Plus className="w-3 h-3" /> Add
+            </button>
+          )}
+        </div>
+        <p className="text-[10px] font-mono text-slate-500">
+          POST JSON to your endpoints when DJ events fire. Add an optional shared secret to receive an
+          <span className="text-slate-300"> X-VDJ-Signature: sha256=… </span>
+          header (HMAC of the raw body).
+        </p>
+
+        {adding && (
+          <div className="mt-3 space-y-2 border-t border-white/5 pt-3">
+            <input
+              value={draftUrl}
+              onChange={e => setDraftUrl(e.target.value)}
+              placeholder="https://hooks.example.com/virtualdj"
+              className={`w-full h-10 px-3 rounded-lg border bg-transparent font-mono text-xs focus:outline-none focus:ring-2 ${
+                theme === 'dark'
+                  ? 'border-white/10 text-white focus:ring-jarvis-accent-cyan/40'
+                  : 'border-slate-200 text-slate-900 focus:ring-jarvis-accent-cyan/30'
+              }`}
+            />
+            <div className="grid grid-cols-2 gap-2">
+              <input
+                value={draftLabel}
+                onChange={e => setDraftLabel(e.target.value)}
+                placeholder="Label (optional)"
+                className={`h-10 px-3 rounded-lg border bg-transparent font-mono text-[11px] focus:outline-none focus:ring-2 ${
+                  theme === 'dark'
+                    ? 'border-white/10 text-white focus:ring-jarvis-accent-cyan/40'
+                    : 'border-slate-200 text-slate-900 focus:ring-jarvis-accent-cyan/30'
+                }`}
+              />
+              <input
+                value={draftSecret}
+                onChange={e => setDraftSecret(e.target.value)}
+                placeholder="Shared secret (optional)"
+                type="password"
+                className={`h-10 px-3 rounded-lg border bg-transparent font-mono text-[11px] focus:outline-none focus:ring-2 ${
+                  theme === 'dark'
+                    ? 'border-white/10 text-white focus:ring-jarvis-accent-cyan/40'
+                    : 'border-slate-200 text-slate-900 focus:ring-jarvis-accent-cyan/30'
+                }`}
+              />
+            </div>
+            <div>
+              <p className="text-[9px] font-mono uppercase tracking-widest text-slate-500 mb-1.5">
+                Events ({draftEvents.length}/{WEBHOOK_EVENTS.length})
+              </p>
+              <div className="grid grid-cols-2 gap-1.5">
+                {WEBHOOK_EVENTS.map(ev => {
+                  const active = draftEvents.includes(ev);
+                  return (
+                    <button
+                      key={ev}
+                      onClick={() => toggleDraftEvent(ev)}
+                      className={`text-left px-2 py-1.5 rounded-md border text-[9px] font-mono uppercase tracking-widest transition ${
+                        active
+                          ? 'border-jarvis-accent-cyan/60 bg-jarvis-accent-cyan/10 text-jarvis-accent-cyan'
+                          : 'border-white/10 text-slate-500 hover:text-slate-300'
+                      }`}
+                    >
+                      {EVENT_LABELS[ev]}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+            {error && (
+              <p className="text-[10px] font-mono text-red-400 flex items-center gap-1.5">
+                <AlertCircle className="w-3 h-3" /> {error}
+              </p>
+            )}
+            <div className="flex items-center gap-2">
+              <button
+                onClick={onSave}
+                disabled={!draftUrl.trim() || draftEvents.length === 0}
+                className="px-4 py-2 rounded-lg bg-jarvis-accent-cyan text-jarvis-bg font-mono font-black text-[10px] uppercase tracking-widest disabled:opacity-30 active:scale-95 transition flex items-center gap-1.5"
+              >
+                <Save className="w-3.5 h-3.5" /> Save
+              </button>
+              <button
+                onClick={() => {
+                  setAdding(false);
+                  setError(null);
+                }}
+                className="px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-[10px] font-mono font-black uppercase tracking-widest text-white hover:bg-white/10 transition"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="space-y-2">
+        {webhooks.length === 0 && !adding && (
+          <div className={`rounded-xl border p-6 text-center ${theme === 'dark' ? 'bg-white/[0.03] border-white/10' : 'bg-slate-50 border-slate-200'}`}>
+            <Webhook className="w-6 h-6 text-slate-600 mx-auto mb-2" />
+            <p className="text-[11px] font-mono text-slate-500">
+              No webhooks yet. Add one to receive event POSTs.
+            </p>
+          </div>
+        )}
+        {webhooks.map(hook => (
+          <WebhookRow
+            key={hook.id}
+            hook={hook}
+            theme={theme}
+            testing={testingId === hook.id}
+            onTest={() => onTest(hook.id)}
+          />
+        ))}
+      </div>
+
+      <div className="space-y-2">
+        <div className="flex items-center justify-between">
+          <h3 className="text-[10px] font-mono font-black uppercase tracking-widest text-slate-500">
+            Recent Deliveries
+          </h3>
+          {deliveries.length > 0 && (
+            <button
+              onClick={clearDeliveries}
+              className="text-[9px] font-mono text-slate-500 hover:text-red-400 uppercase tracking-widest"
+            >
+              Clear log
+            </button>
+          )}
+        </div>
+        {recentDeliveries.length === 0 && (
+          <p className="text-[10px] font-mono text-slate-600 italic">No deliveries yet.</p>
+        )}
+        <div className="space-y-1">
+          {recentDeliveries.map(d => (
+            <div
+              key={d.id}
+              className={`rounded-lg border px-3 py-2 ${
+                theme === 'dark' ? 'bg-white/[0.02] border-white/5' : 'bg-white border-slate-100'
+              }`}
+            >
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2 min-w-0">
+                  <span
+                    className={`text-[8px] font-mono font-black uppercase tracking-widest px-1.5 py-0.5 rounded-full border ${
+                      d.ok
+                        ? 'text-emerald-400 border-emerald-500/30 bg-emerald-500/10'
+                        : 'text-red-400 border-red-500/30 bg-red-500/10'
+                    }`}
+                  >
+                    {d.status ?? 'ERR'}
+                  </span>
+                  <span className="text-[10px] font-mono text-slate-300 truncate">{d.event}</span>
+                </div>
+                <div className="text-[9px] font-mono text-slate-500 shrink-0">
+                  {d.attempts > 1 ? `${d.attempts}× · ` : ''}
+                  {d.durationMs}ms · {timeAgo(d.timestamp)}
+                </div>
+              </div>
+              <div className="text-[9px] font-mono text-slate-600 truncate mt-0.5">{d.url}</div>
+              {d.error && (
+                <div className="text-[9px] font-mono text-red-400/80 truncate mt-0.5">{d.error}</div>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const WebhookRow = ({
+  hook,
+  theme,
+  testing,
+  onTest,
+}: {
+  hook: WebhookConfig;
+  theme: 'dark' | 'light';
+  testing: boolean;
+  onTest: () => void;
+}) => {
+  const status = hook.lastStatus;
+  const statusBadge =
+    status === undefined
+      ? 'text-slate-500 border-white/10 bg-white/5'
+      : status >= 200 && status < 300
+        ? 'text-emerald-400 border-emerald-500/30 bg-emerald-500/10'
+        : 'text-red-400 border-red-500/30 bg-red-500/10';
+
+  return (
+    <div className={`rounded-2xl border p-3 ${theme === 'dark' ? 'bg-white/[0.03] border-white/10' : 'bg-slate-50 border-slate-200'}`}>
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className={`text-xs font-display font-black tracking-tight ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>
+              {hook.label || hook.url.replace(/^https?:\/\//, '').split('/')[0]}
+            </span>
+            <span className={`text-[8px] font-mono font-black uppercase tracking-widest px-2 py-0.5 rounded-full border ${
+              hook.enabled
+                ? 'text-emerald-400 border-emerald-500/30 bg-emerald-500/10'
+                : 'text-slate-500 border-white/10 bg-white/5'
+            }`}>
+              {hook.enabled ? 'On' : 'Off'}
+            </span>
+            {hook.secret && (
+              <span className="text-[8px] font-mono font-black uppercase tracking-widest px-2 py-0.5 rounded-full border text-jarvis-accent-cyan border-jarvis-accent-cyan/30 bg-jarvis-accent-cyan/10">
+                Signed
+              </span>
+            )}
+            {status !== undefined && (
+              <span className={`text-[8px] font-mono font-black uppercase tracking-widest px-2 py-0.5 rounded-full border ${statusBadge}`}>
+                last {status}
+              </span>
+            )}
+          </div>
+          <p className="text-[10px] font-mono text-slate-500 mt-0.5 truncate">{hook.url}</p>
+          <p className="text-[9px] font-mono text-slate-600 mt-0.5">
+            {hook.events.length} event{hook.events.length === 1 ? '' : 's'}
+            {' · '}
+            {hook.successCount} ok / {hook.failureCount} fail
+            {hook.lastDeliveryAt ? ` · last ${timeAgo(hook.lastDeliveryAt)}` : ''}
+          </p>
+        </div>
+        <div className="flex items-center gap-1 shrink-0">
+          <button
+            onClick={onTest}
+            disabled={testing}
+            className="p-2 rounded-lg hover:bg-white/5 text-slate-400 hover:text-jarvis-accent-cyan transition disabled:opacity-40"
+            title="Send test ping"
+          >
+            <Send className={`w-3.5 h-3.5 ${testing ? 'animate-pulse' : ''}`} />
+          </button>
+          <button
+            onClick={() => updateWebhook(hook.id, { enabled: !hook.enabled })}
+            className="p-2 rounded-lg hover:bg-white/5 text-slate-400 hover:text-jarvis-accent-pink transition"
+            title={hook.enabled ? 'Disable' : 'Enable'}
+          >
+            {hook.enabled ? <PowerOff className="w-3.5 h-3.5" /> : <Power className="w-3.5 h-3.5" />}
+          </button>
+          <button
+            onClick={() => removeWebhook(hook.id)}
+            className="p-2 rounded-lg hover:bg-red-500/10 text-slate-400 hover:text-red-400 transition"
+            title="Remove webhook"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      </div>
+      {hook.lastError && (
+        <p className="text-[9px] font-mono text-red-400/80 mt-2 truncate">
+          <AlertCircle className="w-2.5 h-2.5 inline mr-1" /> {hook.lastError}
+        </p>
+      )}
     </div>
   );
 };
