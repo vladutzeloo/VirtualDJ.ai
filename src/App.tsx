@@ -25,7 +25,8 @@ import {
   X,
   Volume2,
   Moon,
-  Sun
+  Sun,
+  Smartphone
 } from "lucide-react";
 import { StatItem } from './components/StatItem';
 import { MixerKnob } from './components/MixerKnob';
@@ -45,6 +46,8 @@ import { SocialPickups } from './components/SocialPickups';
 import { Vault } from './components/Vault';
 
 import { Logo } from './components/Logo';
+import { DeviceIdentity } from './components/DeviceIdentity';
+import { useDeviceTelemetry } from './hooks/useDeviceTelemetry';
 
 const STATIONS = [
   { id: 'sw', label: 'Synthwave', sub: 'SYNTHWAVE', color: 'bg-pink-600/20 text-pink-400 border-pink-500/30' },
@@ -67,6 +70,29 @@ export default function App() {
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
   const [activeTab, setActiveTab] = useState('RADIO');
   const [isVaultOpen, setIsVaultOpen] = useState(false);
+  const [isDeviceIdentityOpen, setIsDeviceIdentityOpen] = useState(false);
+  const telemetry = useDeviceTelemetry();
+  const [usage, setUsage] = useState({
+    sessionStart: Date.now(),
+    tracksPlayed: 0,
+    tracksLiked: 0,
+    agentsDeployed: 0,
+    searchesRun: 0,
+    fpsSamples: [] as number[],
+  });
+
+  useEffect(() => {
+    if (!telemetry.fps) return;
+    setUsage(prev => ({
+      ...prev,
+      fpsSamples: [...prev.fpsSamples.slice(-59), telemetry.fps],
+    }));
+  }, [telemetry.fps]);
+
+  const fpsAvg = usage.fpsSamples.length
+    ? Math.round(usage.fpsSamples.reduce((a, b) => a + b, 0) / usage.fpsSamples.length)
+    : 0;
+  const sessionMin = Math.floor((Date.now() - usage.sessionStart) / 60000);
   const [tracks, setTracks] = useState<TrackData[]>([
     { id: '1', title: 'Neon Nights', artist: 'Jarvis Original', agentLabel: 'BASS ENHANCER', duration: '04:20', isPlaying: false, color: 'cyan' },
     { id: '2', title: 'Data Stream', artist: 'Noisia - Dustup', agentLabel: 'SYNC MASTER', duration: '05:02', isPlaying: false, color: 'pink' },
@@ -110,6 +136,7 @@ export default function App() {
 
   const fetchSuggestions = async (query: string) => {
     setLoadingSuggestions(true);
+    setUsage(prev => ({ ...prev, searchesRun: prev.searchesRun + 1 }));
     addLog(searchMode === 'GLOBAL' ? 'DIGGER' : 'LOCAL-BOT', `Scanning ${searchMode.toLowerCase()} archives for ${query}...`, 'info');
     const recs = await getTrackRecommendations(`${query}${searchMode === 'LOCAL' ? ' (local recording style)' : ''}`);
     setSuggestions(recs);
@@ -153,11 +180,15 @@ export default function App() {
     const track = tracks.find(t => t.id === id);
     if (!track) return;
     addLog(track.agentLabel, `${track.isPlaying ? 'Paused' : 'Playing'} track: ${track.title}`, track.isPlaying ? 'info' : 'success');
+    if (!track.isPlaying) {
+      setUsage(prev => ({ ...prev, tracksPlayed: prev.tracksPlayed + 1 }));
+    }
     setTracks(prev => prev.map(t => t.id === id ? { ...t, isPlaying: !t.isPlaying } : t));
   };
 
   const addTrack = (rec: TrackRecommendation, notes?: string) => {
     addLog('JULES', `Deploying agent "${rec.agentLabel}" to new track: ${rec.title}${notes ? ' (with neural notes)' : ''}`, 'info');
+    setUsage(prev => ({ ...prev, agentsDeployed: prev.agentsDeployed + 1 }));
     setIsDeploying(true);
     
     // Simulate planning state
@@ -287,6 +318,9 @@ export default function App() {
             setSuggestions={setSuggestions}
             onGesture={handleGesture}
             onFileUpload={handleFileUpload}
+            onLike={() => setUsage(prev => ({ ...prev, tracksLiked: prev.tracksLiked + 1 }))}
+            telemetry={telemetry}
+            onOpenDeviceIdentity={() => setIsDeviceIdentityOpen(true)}
             isMobile={true}
           />
         </div>
@@ -294,6 +328,23 @@ export default function App() {
 
       <AnimatePresence>
         {isVaultOpen && <Vault isOpen={isVaultOpen} onClose={() => setIsVaultOpen(false)} theme={theme} />}
+        {isDeviceIdentityOpen && (
+          <DeviceIdentity
+            isOpen={isDeviceIdentityOpen}
+            onClose={() => setIsDeviceIdentityOpen(false)}
+            theme={theme}
+            telemetry={telemetry}
+            usage={{
+              sessionMin,
+              tracksPlayed: usage.tracksPlayed,
+              tracksLiked: usage.tracksLiked,
+              agentsDeployed: usage.agentsDeployed,
+              searchesRun: usage.searchesRun,
+              fpsAvg,
+              peakHeapMB: telemetry.heapUsedMB ?? 0,
+            }}
+          />
+        )}
       </AnimatePresence>
     </div>
   );
@@ -335,6 +386,9 @@ function AppContent({
   setSuggestions,
   onGesture,
   onFileUpload,
+  onLike,
+  telemetry,
+  onOpenDeviceIdentity,
   isMobile = false
 }: any) {
   return (
@@ -493,8 +547,17 @@ function AppContent({
               >
                 <Settings className="w-5 h-5" />
               </button>
-              <button 
-                onClick={() => setShowScanner(true)} 
+              <button
+                onClick={() => onOpenDeviceIdentity()}
+                className={`w-10 h-10 rounded-full flex items-center justify-center border transition-all ${
+                  theme === 'dark' ? 'bg-white/5 border-white/10 text-white' : 'bg-slate-100 border-slate-200 text-slate-600'
+                }`}
+                title="Device Identity"
+              >
+                <Smartphone className="w-5 h-5" />
+              </button>
+              <button
+                onClick={() => setShowScanner(true)}
                 className={`w-10 h-10 rounded-full flex items-center justify-center border transition-all ${
                   theme === 'dark' ? 'bg-white/5 border-white/10 text-white' : 'bg-slate-100 border-slate-200 text-slate-600'
                 }`}
@@ -514,14 +577,67 @@ function AppContent({
       <div className={`${isMobile ? 'flex-wrap py-2 overflow-x-hidden' : ''} flex items-center px-6 py-1 border-b transition-colors relative z-20 ${
         theme === 'dark' ? 'border-jarvis-border/30 bg-transparent' : 'border-slate-100 bg-slate-50/50'
       }`}>
-        <StatItem icon="cpu" label="CPU" value="28%" subValue="- -" theme={theme}/>
-        <StatItem icon="ram" label="RAM" value="12.4 GB" subValue="- -" theme={theme}/>
-        <StatItem icon="vram" label="VRAM" value="6.2 GB" subValue="- -" theme={theme}/>
-        <StatItem icon="pwr" label="SESS" value="1.2k tok" theme={theme}/>
-        <StatItem icon="vram" label="TOTAL" value="84.5k tok" theme={theme}/>
+        <button
+          onClick={() => onOpenDeviceIdentity?.()}
+          className="contents"
+          title="Open Device Identity"
+        >
+          <StatItem
+            icon="cpu"
+            label="LOAD"
+            value={`${telemetry?.cpuLoadPct ?? 0}%`}
+            subValue={`${telemetry?.cores ?? '-'}c`}
+            theme={theme}
+            pct={telemetry?.cpuLoadPct ?? 0}
+          />
+          <StatItem
+            icon="ram"
+            label="HEAP"
+            value={telemetry?.heapUsedMB != null ? `${telemetry.heapUsedMB} MB` : '— MB'}
+            subValue={telemetry?.heapLimitMB != null ? `/${telemetry.heapLimitMB}` : '- -'}
+            theme={theme}
+            pct={
+              telemetry?.heapUsedMB != null && telemetry?.heapLimitMB
+                ? (telemetry.heapUsedMB / telemetry.heapLimitMB) * 100
+                : undefined
+            }
+          />
+          <StatItem
+            icon="vram"
+            label="FPS"
+            value={`${telemetry?.fps ?? 60}`}
+            subValue="hz"
+            theme={theme}
+            pct={Math.min(100, ((telemetry?.fps ?? 60) / 120) * 100)}
+          />
+          <StatItem
+            icon="pwr"
+            label="BATT"
+            value={
+              telemetry?.battery
+                ? `${telemetry.battery.level}%${telemetry.battery.charging ? '⚡' : ''}`
+                : '—'
+            }
+            theme={theme}
+            pct={telemetry?.battery?.level ?? undefined}
+          />
+          <StatItem
+            icon="vram"
+            label="NET"
+            value={telemetry?.network?.type?.toUpperCase() ?? (telemetry?.online ? 'ONLINE' : 'OFFLINE')}
+            subValue={
+              telemetry?.network?.downlinkMbps != null
+                ? `${telemetry.network.downlinkMbps} Mbps`
+                : undefined
+            }
+            theme={theme}
+          />
+        </button>
         <div className="ml-auto flex items-center gap-2">
-          <span className="text-[9px] font-mono text-slate-500 uppercase tracking-widest">LOADED</span>
-          <span className="text-[9px] font-mono text-emerald-500 uppercase font-bold">AI SERVER ONLINE</span>
+          <span className="text-[9px] font-mono text-slate-500 uppercase tracking-widest">DEVICE</span>
+          <span className="text-[9px] font-mono text-jarvis-accent-cyan uppercase font-bold">
+            {telemetry?.online ? 'TELEMETRY LIVE' : 'OFFLINE CACHE'}
+          </span>
         </div>
       </div>
 
@@ -867,9 +983,10 @@ function AppContent({
 
                         <div className="p-3 pt-1">
                           <div className="absolute top-1 right-1 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity z-20">
-                             <button 
+                             <button
                                onClick={(e) => {
                                  e.stopPropagation();
+                                 if (!rec.isLiked) onLike();
                                  setSuggestions(prev => prev.map(s => s.id === rec.id ? { ...s, isLiked: !s.isLiked } : s));
                                }}
                                className={`w-7 h-7 rounded-full flex items-center justify-center transition-all shadow-lg ${rec.isLiked ? 'bg-red-500 text-white' : 'bg-slate-800 text-white hover:bg-red-500/20'}`}
