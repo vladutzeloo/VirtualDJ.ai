@@ -1,6 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Shield, Fingerprint, Lock, Unlock, Key, Eye, EyeOff, Save, X, CheckCircle2, AlertCircle } from 'lucide-react';
+import {
+  authenticateBiometric,
+  checkBiometricSupport,
+  isVaultRegistered,
+  registerBiometric,
+} from '../services/biometricService';
 
 interface VaultProps {
   isOpen: boolean;
@@ -14,11 +20,42 @@ export const Vault = ({ isOpen, onClose, theme }: VaultProps) => {
   const [scanProgress, setScanProgress] = useState(0);
   const [showKey, setShowKey] = useState(false);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
+  const [authError, setAuthError] = useState<string | null>(null);
+  const [hasPlatformAuth, setHasPlatformAuth] = useState(false);
+  const [registered, setRegistered] = useState(false);
 
-  // Handle Scanning Simulation
+  useEffect(() => {
+    if (!isOpen) return;
+    checkBiometricSupport().then(({ platformAvailable }) => {
+      setHasPlatformAuth(platformAvailable);
+      setRegistered(isVaultRegistered());
+    });
+  }, [isOpen]);
+
+  const runBiometricFlow = async () => {
+    setAuthError(null);
+    setIsScanning(true);
+    setScanProgress(15);
+    try {
+      if (!isVaultRegistered()) {
+        await registerBiometric();
+        setRegistered(true);
+      } else {
+        await authenticateBiometric();
+      }
+      setScanProgress(100);
+      setIsUnlocked(true);
+    } catch (err: any) {
+      setAuthError(err?.message ?? 'Biometric authorization failed.');
+    } finally {
+      setIsScanning(false);
+    }
+  };
+
+  // Fallback simulated scan for environments without a platform authenticator.
   useEffect(() => {
     let interval: any;
-    if (isScanning) {
+    if (isScanning && !hasPlatformAuth) {
       setScanProgress(0);
       interval = setInterval(() => {
         setScanProgress(prev => {
@@ -33,7 +70,7 @@ export const Vault = ({ isOpen, onClose, theme }: VaultProps) => {
       }, 30);
     }
     return () => clearInterval(interval);
-  }, [isScanning]);
+  }, [isScanning, hasPlatformAuth]);
 
   const handleSave = () => {
     setSaveStatus('saving');
@@ -130,23 +167,48 @@ export const Vault = ({ isOpen, onClose, theme }: VaultProps) => {
                   <h3 className={`text-lg font-display font-black tracking-tight ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>
                     AUTHENTICATION REQUIRED
                   </h3>
-                  <p className="text-xs font-mono text-slate-500 uppercase tracking-widest max-w-[200px] mx-auto">
-                    Hold Fingerprint Sensor to access neural key store
+                  <p className="text-xs font-mono text-slate-500 uppercase tracking-widest max-w-[240px] mx-auto">
+                    {hasPlatformAuth
+                      ? registered
+                        ? 'Authorize via Touch ID, Windows Hello, or Android Fingerprint'
+                        : 'Enrol this device biometric to seal the neural vault'
+                      : 'Hold Fingerprint Sensor to access neural key store'}
                   </p>
+                  {authError && (
+                    <p className="text-[10px] font-mono text-red-400 max-w-[260px] mx-auto">
+                      {authError}
+                    </p>
+                  )}
                 </div>
 
-                <button
-                  onMouseDown={() => setIsScanning(true)}
-                  onMouseUp={() => setIsScanning(false)}
-                  onMouseLeave={() => setIsScanning(false)}
-                  onTouchStart={() => setIsScanning(true)}
-                  onTouchEnd={() => setIsScanning(false)}
-                  className={`w-full py-4 rounded-2xl font-mono font-black text-xs uppercase tracking-[0.2em] transition-all shadow-xl active:scale-95 ${
-                    isScanning ? 'bg-jarvis-accent-cyan text-jarvis-bg' : 'bg-white/5 border border-white/10 text-white'
-                  }`}
-                >
-                  {isScanning ? `Scanning... ${scanProgress}%` : 'Hold to Authorize'}
-                </button>
+                {hasPlatformAuth ? (
+                  <button
+                    onClick={runBiometricFlow}
+                    disabled={isScanning}
+                    className={`w-full py-4 rounded-2xl font-mono font-black text-xs uppercase tracking-[0.2em] transition-all shadow-xl active:scale-95 ${
+                      isScanning ? 'bg-jarvis-accent-cyan text-jarvis-bg' : 'bg-white/5 border border-white/10 text-white'
+                    }`}
+                  >
+                    {isScanning
+                      ? 'Awaiting Biometric...'
+                      : registered
+                        ? 'Authorize with Biometric'
+                        : 'Enrol Biometric'}
+                  </button>
+                ) : (
+                  <button
+                    onMouseDown={() => setIsScanning(true)}
+                    onMouseUp={() => setIsScanning(false)}
+                    onMouseLeave={() => setIsScanning(false)}
+                    onTouchStart={() => setIsScanning(true)}
+                    onTouchEnd={() => setIsScanning(false)}
+                    className={`w-full py-4 rounded-2xl font-mono font-black text-xs uppercase tracking-[0.2em] transition-all shadow-xl active:scale-95 ${
+                      isScanning ? 'bg-jarvis-accent-cyan text-jarvis-bg' : 'bg-white/5 border border-white/10 text-white'
+                    }`}
+                  >
+                    {isScanning ? `Scanning... ${scanProgress}%` : 'Hold to Authorize'}
+                  </button>
+                )}
               </motion.div>
             ) : (
               <motion.div 
