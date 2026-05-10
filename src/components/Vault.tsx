@@ -762,7 +762,7 @@ const ImportPanel = ({ theme }: { theme: 'dark' | 'light' }) => {
         <textarea
           value={blob}
           onChange={e => setBlob(e.target.value)}
-          placeholder={`# Paste a .env-style block, e.g.\nGEMINI_API_KEY=AIza...\nNVIDIA_API_KEY="nvapi-..."`}
+          placeholder={`# Paste a .env-style block, e.g.\nGEMINI_API_KEY=AIza...\nNVIDIA_API_KEY="nvapi-..."\nLOCAL_LLM_API_KEY="optional-bearer-for-vllm"`}
           rows={6}
           className={`w-full rounded-lg border bg-transparent font-mono text-[11px] p-3 focus:outline-none focus:ring-2 ${
             theme === 'dark'
@@ -772,7 +772,7 @@ const ImportPanel = ({ theme }: { theme: 'dark' | 'light' }) => {
         />
         <div className="flex items-center justify-between mt-3">
           <span className="text-[9px] font-mono text-slate-500 uppercase tracking-widest">
-            Recognised: GEMINI_API_KEY · KIMI_API_KEY · OPENAI_API_KEY · NVIDIA_API_KEY
+            Recognised: GEMINI_API_KEY · KIMI_API_KEY · OPENAI_API_KEY · NVIDIA_API_KEY · LOCAL_LLM_API_KEY
           </span>
           <button
             onClick={onImport}
