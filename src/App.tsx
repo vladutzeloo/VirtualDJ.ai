@@ -69,13 +69,14 @@ import { NotificationCenter } from './components/NotificationCenter';
 import { BellOff, Volume1, VolumeX } from 'lucide-react';
 import { useMotionControls, vibrate } from './hooks/useMotionControls';
 
+const STATION_PILL = 'bg-white/[0.04] text-white/80 border-white/10 hover:bg-white/[0.08] hover:text-white hover:border-vdj-neon-cyan/40';
 const STATIONS = [
-  { id: 'sw', label: 'Synthwave',  sub: 'SYNTHWAVE',  color: 'bg-fuchsia-500/15 text-fuchsia-300 border-fuchsia-500/30 hover:bg-fuchsia-500/25' },
-  { id: 'cp', label: 'Cyberpunk',  sub: 'CYBERPUNK',  color: 'bg-cyan-500/15 text-cyan-300 border-cyan-500/30 hover:bg-cyan-500/25' },
-  { id: 'el', label: 'Electronic', sub: 'ELECTRONIC', color: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30 hover:bg-emerald-500/25' },
-  { id: 'tc', label: 'Techno',     sub: 'TECHNO',     color: 'bg-indigo-500/15 text-indigo-300 border-indigo-500/30 hover:bg-indigo-500/25' },
-  { id: 'tr', label: 'Trap',       sub: 'TRAP',       color: 'bg-amber-500/15 text-amber-300 border-amber-500/30 hover:bg-amber-500/25' },
-  { id: 'rk', label: 'Rock',       sub: 'ROCK',       color: 'bg-rose-500/15 text-rose-300 border-rose-500/30 hover:bg-rose-500/25' },
+  { id: 'sw', label: 'Synthwave',  sub: 'SYNTHWAVE',  color: STATION_PILL },
+  { id: 'cp', label: 'Cyberpunk',  sub: 'CYBERPUNK',  color: STATION_PILL },
+  { id: 'el', label: 'Electronic', sub: 'ELECTRONIC', color: STATION_PILL },
+  { id: 'tc', label: 'Techno',     sub: 'TECHNO',     color: STATION_PILL },
+  { id: 'tr', label: 'Trap',       sub: 'TRAP',       color: STATION_PILL },
+  { id: 'rk', label: 'Rock',       sub: 'ROCK',       color: STATION_PILL },
 ];
 
 interface LogEntry {
