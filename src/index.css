@@ -68,6 +68,26 @@
   }
 }
 
+/* ─── Canvas ──────────────────────────────────────────────────────── */
+/* Single ambient backdrop used for the outer wrapper and the inner phone
+   shell. Dark mode = OLED indigo with a soft brand-cyan glow at the top
+   and a brand-magenta glow at the bottom-left, tying every tab into one
+   cohesive atmosphere. Light mode = soft slate. */
+.vdj-canvas {
+  background-color: var(--color-vdj-bg);
+  background-image:
+    radial-gradient(ellipse 80% 55% at 50% -10%, color-mix(in oklab, var(--color-vdj-neon-cyan) 12%, transparent) 0%, transparent 60%),
+    radial-gradient(ellipse 60% 50% at 0% 110%, color-mix(in oklab, var(--color-vdj-neon-magenta) 10%, transparent) 0%, transparent 55%),
+    radial-gradient(ellipse 70% 50% at 100% 100%, color-mix(in oklab, var(--color-vdj-elevated) 30%, transparent) 0%, transparent 60%);
+  background-attachment: local;
+}
+.vdj-canvas-light {
+  background-color: #F8FAFC;
+  background-image:
+    radial-gradient(ellipse 80% 55% at 50% -10%, rgba(99, 102, 241, 0.08) 0%, transparent 60%),
+    radial-gradient(ellipse 60% 50% at 0% 110%, rgba(168, 85, 247, 0.06) 0%, transparent 55%);
+}
+
 /* Scrollbar — thin, cyan-tinted, matches HUD aesthetic */
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }

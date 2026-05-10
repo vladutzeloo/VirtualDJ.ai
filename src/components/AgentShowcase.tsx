@@ -125,7 +125,7 @@ export const AgentShowcase = () => {
             <div className={`absolute top-8 right-8 px-3 py-1 rounded-full text-[8px] font-mono font-black tracking-widest border ${
                agent.rarity === 'HOLO' ? 'bg-white text-black border-white shadow-[0_0_20px_white]' : 
                agent.rarity === 'LEGENDARY' ? 'bg-jarvis-accent-pink/20 text-jarvis-accent-pink border-jarvis-accent-pink/40' :
-               'bg-black/60 text-slate-400 border-white/10'
+               'bg-vdj-surface-2/70 text-vdj-text-muted border-vdj-border'
             }`}>
                {agent.rarity}
             </div>
@@ -186,7 +186,7 @@ export const AgentShowcase = () => {
                </div>
                <button className={`px-5 py-2.5 rounded-2xl text-[10px] font-mono font-black uppercase tracking-widest transition-all shadow-xl active:scale-95 ${
                  agent.rarity === 'HOLO' ? 'bg-white text-black hover:bg-slate-200' :
-                 `bg-black/60 border border-white/10 text-white hover:border-${agent.color}-500/50 hover:text-${agent.accent.replace('text-', '')}`
+                 `bg-vdj-surface-2/70 border border-vdj-border text-white hover:border-${agent.color}-500/50 hover:text-${agent.accent.replace('text-', '')}`
                }`}>
                  DEPLOY AGENT
                </button>

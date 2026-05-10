@@ -79,7 +79,7 @@ export const DeviceIdentity = ({ isOpen, onClose, theme, usage, telemetry }: Dev
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
-        className="absolute inset-0 bg-black/60 backdrop-blur-md"
+        className="absolute inset-0 bg-vdj-bg/80 backdrop-blur-md"
         onClick={onClose}
       />
 
@@ -151,7 +151,7 @@ export const DeviceIdentity = ({ isOpen, onClose, theme, usage, telemetry }: Dev
                 onChange={e => setDeviceId(e.target.value)}
                 className={`text-[10px] font-mono font-bold uppercase tracking-widest rounded-lg border px-2 py-1 cursor-pointer ${
                   isDark
-                    ? 'bg-black/40 border-white/10 text-white'
+                    ? 'bg-vdj-surface/60 border-vdj-border text-white'
                     : 'bg-white border-slate-200 text-slate-700'
                 }`}
               >
@@ -403,7 +403,7 @@ const SpecChip = ({ icon, label, value, sub, isDark, onClick }: SpecChipProps) =
     onClick={onClick}
     disabled={!onClick}
     className={`text-left rounded-xl border p-3 flex flex-col gap-1 transition-colors ${
-      isDark ? 'bg-black/40 border-white/5' : 'bg-white border-slate-100'
+      isDark ? 'bg-vdj-surface/40 border-vdj-border' : 'bg-white border-slate-100'
     } ${onClick ? 'hover:border-jarvis-accent-cyan/50 cursor-pointer' : 'cursor-default'}`}
   >
     <div className="flex items-center gap-1.5 text-jarvis-accent-cyan">
@@ -442,7 +442,7 @@ const Meter = ({ icon, label, value, pct, tone, isDark }: MeterProps) => {
   return (
     <div
       className={`rounded-xl border p-3 flex flex-col gap-2 ${
-        isDark ? 'bg-black/40 border-white/5' : 'bg-white border-slate-100'
+        isDark ? 'bg-vdj-surface/40 border-vdj-border' : 'bg-white border-slate-100'
       }`}
     >
       <div className="flex items-center justify-between">
@@ -489,7 +489,7 @@ interface UsageStatProps {
 const UsageStat = ({ icon, label, value, isDark }: UsageStatProps) => (
   <div
     className={`rounded-xl border p-3 flex flex-col gap-1 ${
-      isDark ? 'bg-black/40 border-white/5' : 'bg-white border-slate-100'
+      isDark ? 'bg-vdj-surface/40 border-vdj-border' : 'bg-white border-slate-100'
     }`}
   >
     <div className="flex items-center gap-1.5 text-jarvis-accent-cyan">

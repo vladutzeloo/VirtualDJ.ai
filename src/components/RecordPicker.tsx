@@ -96,7 +96,7 @@ export const RecordPicker = ({ suggestions, onAdd, isLoading }: RecordPickerProp
                <motion.div 
                  animate={{ x: 80, rotate: 360 }}
                  transition={{ rotate: { duration: 10, repeat: Infinity, ease: "linear" } }}
-                 className="absolute top-4 bottom-4 right-0 w-56 bg-black rounded-full shadow-lg border border-white/10 z-10 flex items-center justify-center"
+                 className="absolute top-4 bottom-4 right-0 w-56 bg-vdj-bg rounded-full shadow-lg border border-vdj-border z-10 flex items-center justify-center"
                >
                   <div className="w-20 h-20 rounded-full border border-white/20 flex items-center justify-center bg-slate-800">
                      <div className="w-2 h-2 rounded-full bg-white/20" />

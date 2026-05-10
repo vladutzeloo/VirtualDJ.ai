@@ -100,33 +100,33 @@ export const VisionScanner = ({ onScanResult, onGesture, onClose }: VisionScanne
       initial={{ opacity: 0, scale: 0.9 }}
       animate={{ opacity: 1, scale: 1 }}
       exit={{ opacity: 0, scale: 0.9 }}
-      className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-black/80 backdrop-blur-md"
+      className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-vdj-bg/85 backdrop-blur-md"
     >
       <div className="w-full max-w-xl aspect-square bg-jarvis-card border border-jarvis-border rounded-3xl overflow-hidden relative shadow-2xl">
         <div className="absolute top-6 left-6 z-10 flex flex-col gap-3">
            <div className="flex gap-2">
              <button 
                onClick={() => { setGestureMode(false); setResult(null); }}
-               className={`px-5 py-2.5 rounded-full text-[11px] font-mono font-black tracking-[0.2em] border transition-all shadow-lg active:scale-95 ${!gestureMode ? 'bg-jarvis-accent-cyan border-jarvis-accent-cyan text-jarvis-bg' : 'bg-black/60 border-white/10 text-white backdrop-blur-md'}`}
+               className={`px-5 py-2.5 rounded-full text-[11px] font-mono font-black tracking-[0.2em] border transition-all shadow-lg active:scale-95 ${!gestureMode ? 'bg-jarvis-accent-cyan border-jarvis-accent-cyan text-jarvis-bg' : 'bg-vdj-surface-2/70 border-vdj-border text-white backdrop-blur-md'}`}
              >
                ENVIRONMENT.SCAN()
              </button>
              <button 
                onClick={() => { setGestureMode(true); setResult(null); }}
-               className={`px-5 py-2.5 rounded-full text-[11px] font-mono font-black tracking-[0.2em] border transition-all shadow-lg active:scale-95 ${gestureMode ? 'bg-jarvis-accent-pink border-jarvis-accent-pink text-white' : 'bg-black/60 border-white/10 text-white backdrop-blur-md'}`}
+               className={`px-5 py-2.5 rounded-full text-[11px] font-mono font-black tracking-[0.2em] border transition-all shadow-lg active:scale-95 ${gestureMode ? 'bg-jarvis-accent-pink border-jarvis-accent-pink text-white' : 'bg-vdj-surface-2/70 border-vdj-border text-white backdrop-blur-md'}`}
              >
                GESTURE.LINK()
              </button>
            </div>
            
-           <div className="flex flex-col gap-1 px-3 py-2 bg-black/40 backdrop-blur-sm border-l-2 border-jarvis-accent-cyan/50 rounded-r-lg">
+           <div className="flex flex-col gap-1 px-3 py-2 bg-vdj-surface/50 backdrop-blur-sm border-l-2 border-jarvis-accent-cyan/50 rounded-r-lg">
               <span className="text-[8px] font-mono text-slate-400">LATENCY: <span className="text-jarvis-accent-cyan">18MS</span></span>
               <span className="text-[8px] font-mono text-slate-400">MODEL: <span className="text-jarvis-accent-pink">{gestureMode ? 'MEDIAPIPE-HAND-V1' : 'GEMINI-SCAN-V3'}</span></span>
            </div>
         </div>
         <button 
           onClick={onClose}
-          className="absolute top-6 right-6 z-10 w-12 h-12 rounded-full bg-black/60 border border-white/10 flex items-center justify-center text-white hover:bg-white/20 transition-all backdrop-blur-md active:scale-90"
+          className="absolute top-6 right-6 z-10 w-12 h-12 rounded-full bg-vdj-surface-2/70 border border-vdj-border flex items-center justify-center text-white hover:bg-vdj-elevated/60 transition-all backdrop-blur-md active:scale-90"
         >
           <X className="w-6 h-6" />
         </button>
@@ -208,7 +208,7 @@ export const VisionScanner = ({ onScanResult, onGesture, onClose }: VisionScanne
                disabled={scanning}
                className="mx-auto flex flex-col items-center gap-4 group"
              >
-                <div className={`w-28 h-28 rounded-full border-2 border-white/20 flex items-center justify-center transition-all bg-black/40 backdrop-blur-md relative ${scanning ? 'scale-90' : 'group-hover:scale-105 group-active:scale-95'}`}>
+                <div className={`w-28 h-28 rounded-full border-2 border-vdj-border-strong flex items-center justify-center transition-all bg-vdj-surface/50 backdrop-blur-md relative ${scanning ? 'scale-90' : 'group-hover:scale-105 group-active:scale-95'}`}>
                    <div className={`absolute -inset-1 rounded-full border border-dashed animate-[spin_6s_linear_infinite] opacity-40 ${gestureMode ? 'border-jarvis-accent-pink' : 'border-jarvis-accent-cyan'}`} />
                    
                    <div className={`w-20 h-20 rounded-full flex items-center justify-center text-black shadow-lg ${gestureMode ? 'bg-jarvis-accent-pink shadow-[0_0_20px_rgba(255,0,255,0.4)]' : 'bg-jarvis-accent-cyan shadow-[0_0_20px_rgba(0,242,255,0.4)]'}`}>

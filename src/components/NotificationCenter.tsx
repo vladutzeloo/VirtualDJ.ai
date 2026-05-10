@@ -66,7 +66,7 @@ export function NotificationCenter({ theme = 'dark' }: NotificationCenterProps) 
               transition={{ type: 'spring', stiffness: 380, damping: 30 }}
               className={`pointer-events-auto w-full max-w-sm overflow-hidden rounded-2xl border backdrop-blur-xl ${accent.glow} ${
                 isDark
-                  ? 'bg-black/70 border-white/10 text-white'
+                  ? 'bg-vdj-surface-2/80 border-vdj-border text-white'
                   : 'bg-white/90 border-slate-200 text-slate-900'
               }`}
               role="status"
