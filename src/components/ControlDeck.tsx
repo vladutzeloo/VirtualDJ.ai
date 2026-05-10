@@ -103,7 +103,7 @@ export const ControlDeck = () => {
         />
       </div>
 
-      <div className="p-4 rounded-2xl bg-slate-50 dark:bg-black/40 border border-slate-100 dark:border-white/5 flex flex-col gap-4 transition-colors">
+      <div className="p-4 rounded-2xl bg-slate-50 dark:bg-vdj-surface/50 border border-slate-100 dark:border-vdj-border flex flex-col gap-4 transition-colors">
          <div className="flex items-center gap-3">
             <Volume2 className="w-4 h-4 text-slate-400 dark:text-slate-500" />
             <div className="flex-1 h-2 bg-slate-200 dark:bg-slate-800 rounded-full relative overflow-hidden group">

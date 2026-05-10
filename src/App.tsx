@@ -640,14 +640,14 @@ export default function App() {
 
   return (
     <div 
-      className={`flex h-screen w-screen overflow-hidden font-sans relative items-center justify-center transition-colors duration-500 ${theme === 'dark' ? 'bg-[#030708] dark' : 'bg-slate-50'}`}
+      className={`flex h-screen w-screen overflow-hidden font-sans relative items-center justify-center transition-colors duration-500 ${theme === 'dark' ? 'vdj-canvas dark' : 'vdj-canvas-light'}`}
       onDragOver={handleDragOver}
       onDrop={handleDrop}
     >
       {/* Mobile-Only Centered Frame (S23 Ultra Optimized) */}
       <div className="w-full h-full lg:max-w-[420px] lg:h-[90vh] lg:max-h-[900px] relative z-10 flex flex-col group">
         {/* S23 Ultra Bezel Effect */}
-        <div className="hidden lg:block absolute -inset-6 bg-gradient-to-br from-slate-800 to-black rounded-[4.5rem] -z-10 shadow-[0_0_50px_rgba(0,0,0,0.8)] border border-white/5" />
+        <div className="hidden lg:block absolute -inset-6 bg-gradient-to-br from-vdj-elevated/40 via-vdj-surface-2 to-vdj-bg rounded-[4.5rem] -z-10 shadow-[0_0_60px_-10px_rgba(99,102,241,0.35)] border border-vdj-border" />
         
         {/* Notch Area (Top Speaker/Camera) */}
         <div className="hidden lg:flex absolute top-4 left-1/2 -translate-x-1/2 w-32 h-1 bg-white/10 rounded-full z-50 overflow-hidden">
@@ -655,7 +655,7 @@ export default function App() {
         </div>
 
         <div className={`flex-1 flex flex-col overflow-hidden border relative transition-colors duration-500 ${
-          theme === 'dark' ? 'bg-black border-white/10' : 'bg-white border-slate-200'
+          theme === 'dark' ? 'vdj-canvas border-vdj-border' : 'vdj-canvas-light border-slate-200'
         } lg:rounded-[3.5rem] lg:shadow-2xl`}>
           <AIBrain searching={loadingSuggestions} deploying={isDeploying} offline={isOffline} theme={theme} />
           <AppContent
@@ -842,7 +842,7 @@ function AppContent({
               exit={{ opacity: 0, y: -8, scale: 0.96 }}
               transition={{ type: 'spring', stiffness: 360, damping: 28 }}
               className={`fixed top-20 right-4 z-[270] w-72 rounded-2xl border backdrop-blur-2xl shadow-2xl overflow-hidden ${
-                theme === 'dark' ? 'bg-black/80 border-white/10' : 'bg-white/95 border-slate-200'
+                theme === 'dark' ? 'bg-vdj-surface-2/80 border-vdj-border-strong' : 'bg-white/95 border-slate-200'
               }`}
               role="dialog"
               aria-label="Sound and notification preferences"
@@ -961,7 +961,7 @@ function AppContent({
             initial={{ opacity: 0, y: 50 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 50 }}
             className="fixed bottom-20 inset-x-4 z-[60] flex justify-center pointer-events-none"
           >
-            <div className="glass bg-black border border-emerald-500/30 rounded-3xl p-6 flex items-center gap-10 pointer-events-auto shadow-3xl backdrop-blur-3xl">
+            <div className="glass bg-vdj-bg/85 border border-emerald-500/30 rounded-3xl p-6 flex items-center gap-10 pointer-events-auto shadow-3xl backdrop-blur-3xl">
                <div className="flex flex-col items-center">
                   <span className="text-[10px] font-mono text-emerald-400 font-bold tracking-widest">HEART RATE</span>
                   <div className="flex items-center gap-3">
@@ -1022,7 +1022,7 @@ function AppContent({
               {theme === 'dark' ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
             </button>
             <div className={`flex items-center px-3 py-1 rounded-full border transition-colors ${
-              theme === 'dark' ? 'bg-black/40 border-jarvis-accent-pink/30' : 'bg-slate-50 border-jarvis-accent-pink/20 shadow-sm'
+              theme === 'dark' ? 'bg-vdj-surface/50 border-jarvis-accent-pink/30' : 'bg-slate-50 border-jarvis-accent-pink/20 shadow-sm'
             }`}>
               <div className="flex gap-1">
                 {Array.from({ length: 10 }).map((_, i) => (
@@ -1074,7 +1074,7 @@ function AppContent({
       {/* S23 Ultra Mobile Header */}
       {isMobile && (
         <header className={`flex items-center justify-between px-6 py-4 backdrop-blur-md z-50 border-b transition-colors ${
-          theme === 'dark' ? 'bg-black/40 border-white/5' : 'bg-white/40 border-slate-200'
+          theme === 'dark' ? 'bg-vdj-surface-2/50 border-vdj-border' : 'bg-white/40 border-slate-200'
         }`}>
            <Logo className="scale-90 origin-left" />
            <div className="flex items-center gap-3 relative">
@@ -1452,7 +1452,7 @@ function AppContent({
               {/* Top Mix Area */}
           <div className={`grid ${isMobile ? 'grid-cols-1' : 'grid-cols-1 md:grid-cols-2'} gap-6 items-start`}>
              <div className="flex flex-col gap-6">
-                <div className="flex flex-col gap-4 glass bg-black/20 backdrop-blur-md p-6 rounded-2xl relative border-jarvis-accent-cyan/10">
+                <div className="flex flex-col gap-4 glass bg-vdj-surface/40 backdrop-blur-md p-6 rounded-2xl relative border-jarvis-accent-cyan/10">
                 <div className="flex justify-between items-center mb-2">
                    <div className="flex items-center gap-2">
                      <LayoutGrid className="w-4 h-4 text-jarvis-accent-cyan" />
@@ -1586,7 +1586,7 @@ function AppContent({
                         exit={{ opacity: 0, scale: 0.9 }}
                         whileHover={{ y: -5 }}
                         onClick={() => setSelectedTrack(rec)}
-                        className="flex flex-col glass rounded-xl bg-black/20 backdrop-blur-md border-jarvis-border group relative overflow-hidden cursor-pointer h-full"
+                        className="flex flex-col glass rounded-xl bg-vdj-surface/40 backdrop-blur-md border-vdj-border group relative overflow-hidden cursor-pointer h-full"
                       >
                         {/* Background Artwork */}
                         <div className="h-24 overflow-hidden relative">
@@ -1758,7 +1758,7 @@ function AppContent({
       {/* S23 Ultra Foot Navigation */}
       {isMobile && (
         <footer className={`fixed bottom-0 inset-x-0 h-20 border-t flex items-center justify-around px-4 pb-2 z-[100] transition-colors duration-500 ${
-          theme === 'dark' ? 'bg-black/80 backdrop-blur-3xl border-white/5' : 'bg-white/90 backdrop-blur-3xl border-slate-200'
+          theme === 'dark' ? 'bg-vdj-bg/85 backdrop-blur-3xl border-vdj-border' : 'bg-white/90 backdrop-blur-3xl border-slate-200'
         }`}>
            {[
              { id: 'RADIO', icon: Music, label: 'RADIO' },

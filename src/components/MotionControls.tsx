@@ -37,7 +37,7 @@ export const MotionControls = ({ state, onEnable, onDisable, onTestPulse }: Moti
   const denied = permission === 'denied';
 
   return (
-    <div className="flex flex-col gap-3 p-4 glass rounded-2xl bg-black/30 backdrop-blur-md border border-jarvis-border/40 relative overflow-hidden">
+    <div className="flex flex-col gap-3 p-4 glass rounded-2xl bg-vdj-surface/40 backdrop-blur-md border border-jarvis-border/40 relative overflow-hidden">
       <div className="absolute -top-12 -right-12 w-32 h-32 rounded-full bg-jarvis-accent-cyan/10 blur-3xl pointer-events-none" />
 
       <div className="flex items-center justify-between">
