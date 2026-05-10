@@ -65,10 +65,10 @@ export const ControlDeck = () => {
 
       {/* 3D Audio Knobs Row */}
       <div className="grid grid-cols-4 gap-4 py-4 border-y bg-slate-400/5 -mx-6 px-6 transition-colors border-slate-100 dark:border-white/5">
-        <AudioKnob3D label="Low" value={knobValues.low} />
-        <AudioKnob3D label="Mid" value={knobValues.mid} />
-        <AudioKnob3D label="High" value={knobValues.high} />
-        <AudioKnob3D label="Master" value={knobValues.master} />
+        <AudioKnob3D label="Low" value={knobValues.low} onChange={(v) => setKnobValues(prev => ({ ...prev, low: v }))} />
+        <AudioKnob3D label="Mid" value={knobValues.mid} onChange={(v) => setKnobValues(prev => ({ ...prev, mid: v }))} />
+        <AudioKnob3D label="High" value={knobValues.high} onChange={(v) => setKnobValues(prev => ({ ...prev, high: v }))} />
+        <AudioKnob3D label="Master" value={knobValues.master} onChange={(v) => setKnobValues(prev => ({ ...prev, master: v }))} />
       </div>
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
