@@ -28,6 +28,9 @@ interface PlaylistPanelProps {
   onClearVerdict: (id: string) => void;
   onUseSeedQuery: (seed: string) => void;
   theme: 'dark' | 'light';
+  /** Optional reputation-aware system-prompt addendum forwarded into
+   *  `analyzePreferences` so the taste agent weights TRUSTED personas. */
+  agentBriefing?: string;
 }
 
 export const PlaylistPanel = ({
@@ -40,6 +43,7 @@ export const PlaylistPanel = ({
   onClearVerdict,
   onUseSeedQuery,
   theme,
+  agentBriefing,
 }: PlaylistPanelProps) => {
   const [profile, setProfile] = useState<TasteProfile | null>(null);
   const [loading, setLoading] = useState(false);
@@ -68,7 +72,7 @@ export const PlaylistPanel = ({
     let cancelled = false;
     setLoading(true);
     setError(null);
-    analyzePreferences(feedback)
+    analyzePreferences(feedback, undefined, agentBriefing)
       .then((p) => {
         if (!cancelled) setProfile(p);
       })
@@ -81,7 +85,7 @@ export const PlaylistPanel = ({
     return () => {
       cancelled = true;
     };
-  }, [isOpen, fingerprint]);
+  }, [isOpen, fingerprint, agentBriefing]);
 
   const reasonForId = (id: string) =>
     profile?.per_track.find((p) => p.id === id)?.why;
