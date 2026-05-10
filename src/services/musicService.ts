@@ -45,9 +45,10 @@ export interface TrackRecommendation {
 export const makeTrackId = (title: string, artist: string): string =>
   `${title}::${artist}`.toLowerCase().replace(/\s+/g, '-').slice(0, 120);
 
-const RECOMMENDATION_PROMPT = (genrePreference: string) => `You are a DJ-curation agent with live web access. Use Google Search to find REAL, currently-released ${genrePreference} tracks (prefer the last 24 months when possible). Verify titles, artists and release dates against the web.
+const RECOMMENDATION_PROMPT = (genrePreference: string, agentBriefing?: string) => `You are a DJ-curation agent with live web access. Use Google Search to find REAL, currently-released ${genrePreference} tracks (prefer the last 24 months when possible). Verify titles, artists and release dates against the web.
 
 For each of 5 tracks, assign a specialized AI Agent persona (e.g. "Bass Enhancer", "Vocal Refiner", "Harmonic Sync", "Sync Master", "Ambient Soul").
+${agentBriefing ? `\nBefore deciding which agent persona to assign, read the user's persona reputation briefing below and prefer agents the user has TRUSTED. Avoid reusing personas the user has flagged AVOID.\n\n${agentBriefing}\n` : ''}
 
 Return ONLY a single JSON array (no prose, no markdown fences) of 5 objects with this exact shape:
 [
@@ -78,12 +79,15 @@ function extractJsonArray(raw: string): unknown {
   }
 }
 
-export const getTrackRecommendations = async (genrePreference: string): Promise<TrackRecommendation[]> => {
+export const getTrackRecommendations = async (
+  genrePreference: string,
+  agentBriefing?: string,
+): Promise<TrackRecommendation[]> => {
   try {
     const ai = getAI();
     const response = await ai.models.generateContent({
       model: "gemini-3-flash-preview",
-      contents: RECOMMENDATION_PROMPT(genrePreference),
+      contents: RECOMMENDATION_PROMPT(genrePreference, agentBriefing),
       config: {
         tools: [{ googleSearch: {} }],
       },
@@ -170,6 +174,7 @@ function audiusToRecommendation(track: AudiusTrack, index: number, queryGenre: s
 export const searchPlayableTracks = async (
   query: string,
   limit = 8,
+  agentBriefing?: string,
 ): Promise<TrackRecommendation[]> => {
   try {
     const audius = await searchAudiusTracks(query, limit);
@@ -179,5 +184,5 @@ export const searchPlayableTracks = async (
   } catch (err) {
     console.warn('Audius search failed, falling back to Gemini:', err);
   }
-  return getTrackRecommendations(query);
+  return getTrackRecommendations(query, agentBriefing);
 };

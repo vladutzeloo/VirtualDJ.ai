@@ -51,6 +51,14 @@ import { SocialPickups } from './components/SocialPickups';
 import { Vault } from './components/Vault';
 import { DJShop } from './components/DJShop';
 import { DEFAULT_SKIN_ID, DJSkin, findSkin } from './data/djSkins';
+import {
+  AgentReputations,
+  blankRep,
+  formatAgentBriefing,
+  loadReputations,
+  persistReputations,
+} from './services/agentReputationService';
+import { AgentRanker } from './components/AgentRanker';
 
 import { Logo } from './components/Logo';
 import { DeviceIdentity } from './components/DeviceIdentity';
@@ -167,6 +175,69 @@ export default function App() {
   };
 
   const equippedSkin = findSkin(shopState.equippedSkinId);
+
+  const [agentReputations, setAgentReputations] = useState<AgentReputations>(() => loadReputations());
+
+  useEffect(() => {
+    persistReputations(agentReputations);
+  }, [agentReputations]);
+
+  const AGENT_LIKE_BONUS = 50;
+
+  type AgentEvent = 'trackLike' | 'trackDislike' | 'upvote' | 'downvote';
+  const recordAgentFeedback = (
+    agentLabel: string,
+    event: AgentEvent,
+    note?: string,
+  ) => {
+    if (!agentLabel) return;
+    setAgentReputations(prev => {
+      const current = prev[agentLabel] ?? blankRep(agentLabel);
+      const next = { ...current, lastFeedbackAt: Date.now() };
+      if (event === 'trackLike') {
+        next.trackLikes += 1;
+        next.bonusCreditsEarned += AGENT_LIKE_BONUS;
+      } else if (event === 'trackDislike') {
+        next.trackDislikes += 1;
+      } else if (event === 'upvote') {
+        next.upvotes += 1;
+      } else {
+        next.downvotes += 1;
+      }
+      const trimmedNote = note?.trim();
+      if (trimmedNote) {
+        next.notes = [...current.notes, trimmedNote.slice(0, 140)].slice(-12);
+      }
+      return { ...prev, [agentLabel]: next };
+    });
+  };
+
+  const rateAgent = (agentLabel: string, vote: 'up' | 'down') => {
+    if (vote === 'up') {
+      recordAgentFeedback(agentLabel, 'upvote');
+      awardCredits(15);
+      addLog('AGENT-RANK', `Upvoted ${agentLabel}. Reputation strengthened.`, 'success');
+      notify({
+        title: `${agentLabel} upvoted`,
+        message: '+15 credits · agent context updated.',
+        type: 'success',
+        agent: 'AGENT-RANK',
+        sound: 'like',
+        duration: 2000,
+      });
+    } else {
+      recordAgentFeedback(agentLabel, 'downvote');
+      addLog('AGENT-RANK', `Downvoted ${agentLabel}. Future picks will be deprioritized.`, 'warn');
+      notify({
+        title: `${agentLabel} downvoted`,
+        message: 'Agent will be deprioritized in future calls.',
+        type: 'warn',
+        agent: 'AGENT-RANK',
+        sound: 'pause',
+        duration: 2000,
+      });
+    }
+  };
   const telemetry = useDeviceTelemetry();
   const [usage, setUsage] = useState({
     sessionStart: Date.now(),
@@ -285,10 +356,35 @@ export default function App() {
       removePref('disliked', rec.id);
       upsertPref('liked', updated);
       onLikeIncrement();
+      if (rec.agentLabel) {
+        recordAgentFeedback(rec.agentLabel, 'trackLike', reason);
+        awardCredits(AGENT_LIKE_BONUS);
+        addLog(
+          rec.agentLabel,
+          `+${AGENT_LIKE_BONUS} bonus credits — agent's pick "${rec.title}" was liked.`,
+          'success',
+        );
+        notify({
+          title: `${rec.agentLabel} earned you ${AGENT_LIKE_BONUS} credits`,
+          message: `For finding "${rec.title}".`,
+          type: 'success',
+          agent: rec.agentLabel,
+          sound: 'like',
+          duration: 2400,
+        });
+      }
       addLog('TASTE-AGENT', `Liked "${rec.title}". Updating taste profile.`, 'success');
     } else {
       removePref('liked', rec.id);
       upsertPref('disliked', updated);
+      if (rec.agentLabel) {
+        recordAgentFeedback(rec.agentLabel, 'trackDislike', reason);
+        addLog(
+          rec.agentLabel,
+          `Reputation dinged — pick "${rec.title}" was disliked.`,
+          'warn',
+        );
+      }
       addLog('TASTE-AGENT', `Disliked "${rec.title}". Updating taste profile.`, 'warn');
     }
   };
@@ -493,7 +589,15 @@ export default function App() {
       sound: 'scan',
       duration: 2200,
     });
-    const recs = await searchPlayableTracks(`${query}${searchMode === 'LOCAL' ? ' (local recording style)' : ''}`);
+    const briefing = formatAgentBriefing(agentReputations);
+    if (briefing) {
+      addLog('AGENT-RANK', 'Injecting agent reputation briefing into recommender context.', 'info');
+    }
+    const recs = await searchPlayableTracks(
+      `${query}${searchMode === 'LOCAL' ? ' (local recording style)' : ''}`,
+      8,
+      briefing,
+    );
     const hydrated = recs.map(rec => {
       const liked = prefs.liked.find(t => t.id === rec.id);
       const disliked = prefs.disliked.find(t => t.id === rec.id);
@@ -757,6 +861,8 @@ export default function App() {
             onOpenShop={() => setIsShopOpen(true)}
             credits={shopState.credits}
             equippedSkin={equippedSkin}
+            agentReputations={agentReputations}
+            onRateAgent={rateAgent}
             activeTab={activeTab}
             setActiveTab={setActiveTab}
             tracks={tracks}
@@ -886,6 +992,8 @@ function AppContent({
   onOpenShop,
   credits,
   equippedSkin,
+  agentReputations,
+  onRateAgent,
   activeTab,
   setActiveTab,
   tracks,
@@ -1697,6 +1805,13 @@ function AppContent({
                    <span className="vdj-mono text-[10px] font-bold text-vdj-neon-cyan uppercase tracking-[0.2em]">Auto-Curator V.2</span>
                 </div>
              </div>
+
+             <AgentRanker
+               reputations={agentReputations}
+               agentAvatars={agentAvatars}
+               onRate={onRateAgent}
+               visibleAgentLabels={suggestions.map((s: TrackRecommendation) => s.agentLabel)}
+             />
 
              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 relative">
                 {/* Discovery Animation 1: Scanning Overlay */}
