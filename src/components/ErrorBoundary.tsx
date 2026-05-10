@@ -61,7 +61,9 @@ export class ErrorBoundary extends Component<Props, State> {
             <button
               onClick={() => {
                 try {
-                  localStorage.clear();
+                  Object.keys(localStorage)
+                    .filter(key => key.startsWith('vdj.'))
+                    .forEach(key => localStorage.removeItem(key));
                 } catch {
                   /* storage unavailable */
                 }
