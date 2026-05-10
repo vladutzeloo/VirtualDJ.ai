@@ -12,6 +12,7 @@ import {
   Globe, 
   Building2, 
   Music,
+  Play,
   Disc,
   Heart,
   ThumbsDown,
@@ -67,6 +68,7 @@ import { canonicalizePersona } from './services/agentPersonas';
 import { AgentRanker } from './components/AgentRanker';
 
 import { Logo } from './components/Logo';
+import { LocalLlmStatus } from './components/LocalLlmStatus';
 import { DeviceIdentity } from './components/DeviceIdentity';
 import { MotionControls } from './components/MotionControls';
 import { useDeviceTelemetry } from './hooks/useDeviceTelemetry';
@@ -532,6 +534,41 @@ export default function App() {
     if (!audio) return;
     audio.volume = Math.max(0, Math.min(1, mixerValues.volume / 100));
   }, [mixerValues.volume]);
+
+  // First-gesture autoplay. Browsers block audio.play() until the user
+  // interacts with the page; once we have a seeded playable track, we
+  // attach a one-shot listener that starts the deck on the next pointer
+  // or key event. Bails if the user already loaded a track manually
+  // (audioRef.current.src is non-empty), so this never overrides an
+  // explicit play/pause action.
+  const autoStartedRef = useRef(false);
+  useEffect(() => {
+    if (autoStartedRef.current) return;
+    if (typeof document === 'undefined') return;
+    if (tracks.length === 0) return;
+    if (!tracks.some(t => t.audioUrl)) return;
+
+    const tryAutoplay = () => {
+      if (autoStartedRef.current) return;
+      if (audioRef.current?.src) {
+        autoStartedRef.current = true;
+        return;
+      }
+      const playable = tracks.find(t => t.audioUrl);
+      if (!playable) return;
+      autoStartedRef.current = true;
+      playTrack(playable);
+    };
+
+    document.addEventListener('pointerdown', tryAutoplay, { once: true });
+    document.addEventListener('keydown', tryAutoplay, { once: true });
+    document.addEventListener('touchstart', tryAutoplay, { once: true });
+    return () => {
+      document.removeEventListener('pointerdown', tryAutoplay);
+      document.removeEventListener('keydown', tryAutoplay);
+      document.removeEventListener('touchstart', tryAutoplay);
+    };
+  }, [tracks]);
 
   const stopAllPlayingFlags = () => {
     setTracks(prev => prev.map(t => ({ ...t, isPlaying: false })));
@@ -1902,6 +1939,66 @@ function AppContent({
                 </p>
               </div>
 
+              {/* Local LLM status + Now Playing hero — main of the show */}
+              <LocalLlmStatus onOpenVault={() => setIsVaultOpen(true)} />
+
+              {(() => {
+                const loadedIdx = playback.id ? tracks.findIndex((t: TrackData) => t.id === playback.id) : -1;
+                const activeIdx = loadedIdx >= 0 ? loadedIdx : tracks.findIndex((t: TrackData) => t.isPlaying);
+                const playingTrack: TrackData | undefined = activeIdx >= 0 ? tracks[activeIdx] : undefined;
+                const playingIdx = activeIdx;
+                const next = tracks.find((t: TrackData, i: number) => i !== playingIdx && t.audioUrl) ?? tracks.find((_: TrackData, i: number) => i !== playingIdx);
+                return (
+                  <div className="flex flex-col gap-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className={`w-2 h-2 rounded-full ${playingTrack ? 'bg-emerald-400 animate-pulse shadow-[0_0_10px_var(--color-emerald-400)]' : 'bg-slate-600'}`} />
+                        <h2 className="text-sm font-display font-black uppercase tracking-[0.25em] text-white">NOW PLAYING</h2>
+                      </div>
+                      <span className="text-[9px] font-mono uppercase tracking-widest text-slate-500">
+                        {playingTrack ? 'LIVE' : loadingSuggestions ? 'LOADING' : 'IDLE'}
+                      </span>
+                    </div>
+                    {playingTrack ? (
+                      <TrackLayer
+                        key={playingTrack.id}
+                        title={`Layer ${String.fromCharCode(65 + playingIdx)}`}
+                        track={playingTrack}
+                        onPlayToggle={() => togglePlay(playingTrack.id)}
+                        onNext={tracks.length > 1 ? onNextTrack : undefined}
+                        onRestart={onRestartTrack}
+                        currentTime={playback.id === playingTrack.id ? playback.currentTime : 0}
+                        totalSeconds={playback.id === playingTrack.id ? playback.duration : 0}
+                      />
+                    ) : (
+                      <div className="p-5 glass rounded-2xl bg-jarvis-card flex items-center justify-between gap-3 border-2 border-jarvis-accent-cyan/30 shadow-[0_0_30px_rgba(0,242,255,0.15)]">
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className="w-14 h-14 rounded-xl bg-slate-900 border border-jarvis-accent-cyan/40 flex items-center justify-center text-jarvis-accent-cyan animate-pulse shrink-0">
+                            <Music className="w-7 h-7" />
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-sm font-display font-black text-white uppercase tracking-widest">
+                              {next ? 'Ready to spin' : loadingSuggestions ? 'Searching the grid…' : 'No tracks loaded'}
+                            </p>
+                            <p className="text-[10px] font-mono text-slate-400 truncate">
+                              {next ? `${next.title} — ${next.artist}` : loadingSuggestions ? 'AI is loading playable tracks…' : 'Use the AI search below to load tracks.'}
+                            </p>
+                          </div>
+                        </div>
+                        {next && (
+                          <button
+                            onClick={() => togglePlay(next.id)}
+                            className="px-4 py-2 rounded-full bg-jarvis-accent-cyan border border-jarvis-accent-cyan text-jarvis-bg text-xs font-display font-black uppercase tracking-widest hover:scale-105 active:scale-95 transition-all shadow-[0_0_25px_rgba(0,242,255,0.5)] shrink-0 flex items-center gap-1.5"
+                          >
+                            <Play className="w-3.5 h-3.5 fill-current" /> Play
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+
               <Turntable3D isPlaying={tracks.some((t: any) => t.isPlaying)} skin={equippedSkin} />
 
               {/* Top Mix Area */}
@@ -1979,50 +2076,6 @@ function AppContent({
                   return (
                     <>
                       <div className="flex items-center justify-between">
-                         <div className="flex items-center gap-2">
-                           <span className={`w-1.5 h-1.5 rounded-full ${playingTrack ? 'bg-emerald-400 animate-pulse shadow-[0_0_8px_var(--color-emerald-400)]' : 'bg-slate-600'}`} />
-                           <h2 className="text-sm font-display font-bold uppercase tracking-[0.2em] text-white">NOW PLAYING</h2>
-                         </div>
-                         <span className="text-[9px] font-mono uppercase tracking-widest text-slate-500">
-                           {playingTrack ? 'LIVE' : 'IDLE'}
-                         </span>
-                      </div>
-                      {playingTrack ? (
-                        <TrackLayer
-                          key={playingTrack.id}
-                          title={`Layer ${String.fromCharCode(65 + playingIdx)}`}
-                          track={playingTrack}
-                          onPlayToggle={() => togglePlay(playingTrack.id)}
-                          onNext={tracks.length > 1 ? onNextTrack : undefined}
-                          onRestart={onRestartTrack}
-                          currentTime={playback.id === playingTrack.id ? playback.currentTime : 0}
-                          totalSeconds={playback.id === playingTrack.id ? playback.duration : 0}
-                        />
-                      ) : (
-                        <div className="p-4 glass rounded-xl bg-jarvis-card flex items-center justify-between gap-3 border border-jarvis-border/40">
-                          <div className="flex items-center gap-3 min-w-0">
-                            <div className="w-12 h-12 rounded-lg bg-slate-900 border border-jarvis-border/60 flex items-center justify-center text-slate-600">
-                              <Music className="w-5 h-5" />
-                            </div>
-                            <div className="min-w-0">
-                              <p className="text-xs font-display font-bold text-slate-400 uppercase tracking-widest">Nothing playing</p>
-                              <p className="text-[10px] font-mono text-slate-600 truncate">
-                                {queue[0] ? `Tap play on "${queue[0].title}"` : 'Search the AI agent below to load tracks.'}
-                              </p>
-                            </div>
-                          </div>
-                          {queue[0] && (
-                            <button
-                              onClick={() => togglePlay(queue[0].id)}
-                              className="px-3 py-1.5 rounded-full bg-jarvis-accent-cyan/20 border border-jarvis-accent-cyan/40 text-[10px] font-mono font-bold text-jarvis-accent-cyan hover:bg-jarvis-accent-cyan/30 transition-all uppercase tracking-widest shrink-0"
-                            >
-                              ▶ Play
-                            </button>
-                          )}
-                        </div>
-                      )}
-
-                      <div className="flex items-center justify-between mt-2">
                          <div className="flex items-center gap-2">
                            <h2 className="text-sm font-display font-bold uppercase tracking-[0.2em] text-white">UP NEXT</h2>
                            <span className="text-[9px] font-mono text-slate-500">{queue.length}</span>
