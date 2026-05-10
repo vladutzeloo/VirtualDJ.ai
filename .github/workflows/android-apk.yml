@@ -1,10 +1,12 @@
 name: android APK
 
 # Wraps the Vite/React web build with Capacitor and produces a debug APK.
+# Every successful run publishes a public GitHub Release so the APK can be
+# downloaded directly on a phone (no GitHub login required).
 # Triggers:
 #  - Manual dispatch (workflow_dispatch) — easiest way to grab a fresh APK
 #  - Pushes to main / claude/** / android-** that touch the app or this workflow
-#  - Tags vX.Y.Z-android — also publishes a draft GitHub Release with the APK
+#  - Tags vX.Y.Z-android — uses the tag name for the release
 on:
   workflow_dispatch:
   push:
@@ -29,6 +31,8 @@ jobs:
     name: Build debug APK
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    permissions:
+      contents: write
 
     steps:
       - name: Checkout
@@ -109,10 +113,47 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
-      - name: Publish draft release (tag builds only)
-        if: startsWith(github.ref, 'refs/tags/v') && endsWith(github.ref, '-android')
+      - name: Compute release metadata
+        id: meta
+        run: |
+          SHORT_SHA="${GITHUB_SHA:0:7}"
+          if [[ "$GITHUB_REF" == refs/tags/v*-android ]]; then
+            TAG="${GITHUB_REF_NAME}"
+            NAME="${GITHUB_REF_NAME}"
+            PRERELEASE=false
+          else
+            TAG="android-${SHORT_SHA}-r${GITHUB_RUN_NUMBER}"
+            NAME="Android build ${SHORT_SHA} (run ${GITHUB_RUN_NUMBER})"
+            PRERELEASE=true
+          fi
+          {
+            echo "tag=$TAG"
+            echo "name=$NAME"
+            echo "prerelease=$PRERELEASE"
+            echo "short_sha=$SHORT_SHA"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Stage APK with versioned filename
+        id: release_apk
+        run: |
+          DEST="virtualdj-${{ steps.meta.outputs.short_sha }}-debug.apk"
+          cp "${{ steps.apk.outputs.path }}" "$DEST"
+          echo "path=$DEST" >> "$GITHUB_OUTPUT"
+
+      - name: Publish release with APK
         uses: softprops/action-gh-release@v2
         with:
-          draft: true
-          name: ${{ github.ref_name }}
-          files: ${{ steps.apk.outputs.path }}
+          draft: false
+          prerelease: ${{ steps.meta.outputs.prerelease }}
+          tag_name: ${{ steps.meta.outputs.tag }}
+          name: ${{ steps.meta.outputs.name }}
+          body: |
+            Auto-built debug APK from commit ${{ github.sha }}.
+
+            - Branch / ref: `${{ github.ref_name }}`
+            - Workflow run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
+            Install on your phone by opening the `.apk` asset URL below in the
+            mobile browser (you may need to allow installs from unknown sources).
+          files: ${{ steps.release_apk.outputs.path }}
+          fail_on_unmatched_files: true
