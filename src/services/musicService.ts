@@ -1,18 +1,33 @@
 import { GoogleGenAI } from "@google/genai";
 import { searchAudiusTracks, type AudiusTrack } from "./audiusService";
+import { getApiKey, markKeyUsed } from "./apiKeyManager";
+import { recordUsage } from "./usageTracker";
 
 let aiInstance: GoogleGenAI | null = null;
+let aiInstanceKey: string | null = null;
 
 function getAI() {
-  if (!aiInstance) {
-    const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) {
-      throw new Error("GEMINI_API_KEY is not set. Please provide it in the environment.");
-    }
-    aiInstance = new GoogleGenAI({ apiKey });
+  const apiKey = getApiKey('gemini');
+  if (!apiKey) {
+    throw new Error("GEMINI_API_KEY is not set. Add it via the Neural Vault or your environment.");
   }
+  if (!aiInstance || aiInstanceKey !== apiKey) {
+    aiInstance = new GoogleGenAI({ apiKey });
+    aiInstanceKey = apiKey;
+  }
+  markKeyUsed('gemini');
   return aiInstance;
 }
+
+const usageMetadataTokens = (response: any): { input: number; output: number } => {
+  const meta = response?.usageMetadata ?? response?.response?.usageMetadata;
+  return {
+    input: Number(meta?.promptTokenCount ?? 0),
+    output: Number(meta?.candidatesTokenCount ?? meta?.totalTokenCount ?? 0),
+  };
+};
+
+const estimateTokens = (text: string) => Math.ceil((text || '').length / 4);
 
 export interface GroundingSource {
   uri: string;
@@ -90,6 +105,15 @@ export const getTrackRecommendations = async (genrePreference: string): Promise<
     });
 
     const text = response.text;
+    const promptText = RECOMMENDATION_PROMPT(genrePreference);
+    const reported = usageMetadataTokens(response);
+    recordUsage({
+      provider: 'gemini',
+      model: 'gemini-3-flash-preview',
+      feature: 'track-recommendations',
+      inputTokens: reported.input || estimateTokens(promptText),
+      outputTokens: reported.output || estimateTokens(text ?? ''),
+    });
     if (!text) return [];
 
     const parsed = extractJsonArray(text);
@@ -115,6 +139,7 @@ export const getTrackRecommendations = async (genrePreference: string): Promise<
         tags: Array.isArray(rec.tags) ? rec.tags.map(String) : [],
         releaseDate: String(rec.releaseDate ?? ""),
         previewUrl: String(rec.previewUrl ?? ""),
+        source: 'Gemini',
         sources,
       };
     });
