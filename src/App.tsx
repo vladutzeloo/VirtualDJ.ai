@@ -261,10 +261,8 @@ export default function App() {
     ? Math.round(usage.fpsSamples.reduce((a, b) => a + b, 0) / usage.fpsSamples.length)
     : 0;
   const sessionMin = Math.floor((Date.now() - usage.sessionStart) / 60000);
-  const [tracks, setTracks] = useState<TrackData[]>([
-    { id: '1', title: 'Neon Nights', artist: 'Jarvis Original', agentLabel: 'BASS ENHANCER', duration: '04:20', isPlaying: false, color: 'cyan' },
-    { id: '2', title: 'Data Stream', artist: 'Noisia - Dustup', agentLabel: 'SYNC MASTER', duration: '05:02', isPlaying: false, color: 'pink' },
-  ]);
+  const [tracks, setTracks] = useState<TrackData[]>([]);
+  const hasSeededDeckRef = useRef(false);
   const [suggestions, setSuggestions] = useState<TrackRecommendation[]>([]);
   const [loadingSuggestions, setLoadingSuggestions] = useState(false);
   const [selectedTrack, setSelectedTrack] = useState<TrackRecommendation | null>(null);
@@ -462,7 +460,14 @@ export default function App() {
       setLocalTracks(prev => prev.map(t => ({ ...t, isPlaying: false })));
     };
     const onErr = () => {
-      addLog('SYSTEM', 'Audio decode error — source may not be a direct audio file.', 'warn');
+      const code = audio.error?.code;
+      const reason =
+        code === 1 ? 'aborted'
+        : code === 2 ? 'network error'
+        : code === 3 ? 'decode error'
+        : code === 4 ? 'source not supported'
+        : 'unknown error';
+      addLog('SYSTEM', `Audio playback failed (${reason}) for ${audio.currentSrc || 'unknown source'}.`, 'warn');
       setPlayback({ id: null, currentTime: 0, duration: 0 });
       setTracks(prev => prev.map(t => ({ ...t, isPlaying: false })));
       setLocalTracks(prev => prev.map(t => ({ ...t, isPlaying: false })));
@@ -656,6 +661,32 @@ export default function App() {
   useEffect(() => {
     fetchSuggestions('Drum & Bass');
   }, []);
+
+  // Auto-seed the deck with the first two playable Audius tracks once
+  // suggestions arrive, so the user has something to press play on.
+  useEffect(() => {
+    if (hasSeededDeckRef.current) return;
+    if (tracks.length > 0) {
+      hasSeededDeckRef.current = true;
+      return;
+    }
+    const playable = suggestions.filter(s => s.streamUrl);
+    if (playable.length === 0) return;
+    hasSeededDeckRef.current = true;
+    setTracks(
+      playable.slice(0, 2).map((rec, i) => ({
+        id: Math.random().toString(36).substr(2, 9),
+        title: rec.title,
+        artist: rec.artist,
+        agentLabel: rec.agentLabel,
+        duration: '03:45',
+        isPlaying: false,
+        color: i % 2 === 0 ? 'cyan' : 'pink',
+        audioUrl: rec.streamUrl,
+        previewUrl: rec.previewUrl,
+      }))
+    );
+  }, [suggestions, tracks.length]);
 
   const togglePlay = (id: string) => {
     const track = tracks.find(t => t.id === id) ?? localTracks.find(t => t.id === id);
