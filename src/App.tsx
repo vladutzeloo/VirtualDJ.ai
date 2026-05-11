@@ -118,6 +118,7 @@ interface PlaybackState {
 
 type Theme = 'dark' | 'light';
 type SearchMode = 'GLOBAL' | 'LOCAL';
+type AppTab = 'RADIO' | 'SIGNALS' | 'CRATE' | 'MIXER' | 'AGENTS' | 'BRAIN';
 
 interface AppContentProps {
   theme: Theme;
@@ -129,8 +130,8 @@ interface AppContentProps {
   equippedSkin: DJSkin | undefined;
   agentReputations: AgentReputations;
   onRateAgent: (agentLabel: string, vote: 'up' | 'down') => void;
-  activeTab: string;
-  setActiveTab: Dispatch<SetStateAction<string>>;
+  activeTab: AppTab;
+  setActiveTab: Dispatch<SetStateAction<AppTab>>;
   tracks: TrackData[];
   playback: PlaybackState;
   suggestions: TrackRecommendation[];
@@ -159,7 +160,6 @@ interface AppContentProps {
   setShowScanner: Dispatch<SetStateAction<boolean>>;
   gymStats: GymStats;
   agentAvatars: Record<string, string>;
-  setSuggestions: Dispatch<SetStateAction<TrackRecommendation[]>>;
   onGesture: (gesture: string) => void;
   onFileUpload: (files: FileList | null) => void;
   onLike: (track?: TrackRecommendation) => void;
@@ -179,7 +179,7 @@ interface AppContentProps {
 export default function App() {
   const { notify, playSound } = useAppFeedback();
   const [theme, setTheme] = useState<Theme>('dark');
-  const [activeTab, setActiveTab] = useState('RADIO');
+  const [activeTab, setActiveTab] = useState<AppTab>('RADIO');
   const [isVaultOpen, setIsVaultOpen] = useState(false);
   const [isDeviceIdentityOpen, setIsDeviceIdentityOpen] = useState(false);
   const [isShopOpen, setIsShopOpen] = useState(false);
@@ -1140,7 +1140,6 @@ export default function App() {
             setShowScanner={setShowScanner}
             gymStats={gymStats}
             agentAvatars={agentAvatars}
-            setSuggestions={setSuggestions}
             onGesture={handleGesture}
             onFileUpload={handleFileUpload}
             onLike={(track?: TrackRecommendation) => {
@@ -1275,7 +1274,6 @@ function AppContent({
   setShowScanner,
   gymStats,
   agentAvatars,
-  setSuggestions,
   onGesture,
   onFileUpload,
   onLike,
@@ -1462,7 +1460,7 @@ function AppContent({
             <Logo />
 
             <nav className="hidden md:flex items-center gap-1 p-1 rounded-full border border-vdj-border bg-vdj-surface/40 backdrop-blur-md">
-              {['RADIO', 'SIGNALS', 'CRATE', 'MIXER', 'AGENTS', 'BRAIN'].map(item => (
+              {(['RADIO', 'SIGNALS', 'CRATE', 'MIXER', 'AGENTS', 'BRAIN'] as const).map(item => (
                 <button
                   key={item}
                   onClick={() => setActiveTab(item)}
@@ -2461,12 +2459,12 @@ function AppContent({
         <footer className={`fixed bottom-0 inset-x-0 h-20 border-t flex items-center justify-around px-4 pb-2 z-[100] transition-colors duration-500 ${
           theme === 'dark' ? 'bg-vdj-bg/85 backdrop-blur-3xl border-vdj-border' : 'bg-white/90 backdrop-blur-3xl border-slate-200'
         }`}>
-           {[
+           {([
              { id: 'RADIO', icon: Music, label: 'RADIO' },
              { id: 'SIGNALS', icon: TrendingUp, label: 'SIGNALS' },
              { id: 'CRATE', icon: Disc, label: 'CRATE' },
-             { id: 'AGENTS', icon: Bot, label: 'AGENTS' }
-           ].map((item: any) => (
+             { id: 'AGENTS', icon: Bot, label: 'AGENTS' },
+           ] as const).map((item) => (
              <button 
                key={item.id}
                onClick={() => setActiveTab(item.id)}
