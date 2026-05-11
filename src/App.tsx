@@ -1999,7 +1999,7 @@ function AppContent({
                       <button
                         type="button"
                         aria-label={mixerValues.volume === 0 ? 'Unmute' : 'Mute'}
-                        onClick={() => setMixerValues((prev: any) => ({ ...prev, volume: prev.volume === 0 ? 80 : 0 }))}
+                        onClick={() => setMixerValues(prev => ({ ...prev, volume: prev.volume === 0 ? 80 : 0 }))}
                         className="text-jarvis-accent-cyan hover:scale-110 active:scale-95 transition-transform shrink-0"
                       >
                         {mixerValues.volume === 0 ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
@@ -2009,7 +2009,7 @@ function AppContent({
                         min={0}
                         max={100}
                         value={mixerValues.volume}
-                        onChange={(e) => setMixerValues((prev: any) => ({ ...prev, volume: parseInt(e.target.value) }))}
+                        onChange={(e) => setMixerValues(prev => ({ ...prev, volume: e.target.valueAsNumber }))}
                         aria-label="Master volume"
                         className="flex-1 h-1.5 appearance-none bg-slate-300 dark:bg-slate-800 rounded-full cursor-pointer accent-jarvis-accent-cyan [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-jarvis-accent-cyan [&::-webkit-slider-thumb]:shadow-[0_0_10px_rgba(0,242,255,0.6)] [&::-moz-range-thumb]:appearance-none [&::-moz-range-thumb]:w-4 [&::-moz-range-thumb]:h-4 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:bg-jarvis-accent-cyan [&::-moz-range-thumb]:border-0"
                       />
