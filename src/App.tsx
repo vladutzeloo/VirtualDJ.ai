@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, type Dispatch, type SetStateAction } from 'react';
 import { motion, AnimatePresence } from "motion/react";
 import { 
   Radio, 
@@ -71,11 +71,11 @@ import { Logo } from './components/Logo';
 import { LocalLlmStatus } from './components/LocalLlmStatus';
 import { DeviceIdentity } from './components/DeviceIdentity';
 import { MotionControls } from './components/MotionControls';
-import { useDeviceTelemetry } from './hooks/useDeviceTelemetry';
+import { useDeviceTelemetry, type DeviceTelemetry } from './hooks/useDeviceTelemetry';
 import { useAppFeedback } from './hooks/useAppFeedback';
 import { NotificationCenter } from './components/NotificationCenter';
 import { BellOff, Volume1, VolumeX } from 'lucide-react';
-import { useMotionControls, vibrate } from './hooks/useMotionControls';
+import { useMotionControls, vibrate, type MotionState } from './hooks/useMotionControls';
 
 const STATION_PILL = 'bg-white/[0.04] text-white/80 border-white/10 hover:bg-white/[0.08] hover:text-white hover:border-vdj-neon-cyan/40';
 const STATIONS = [
@@ -95,9 +95,90 @@ interface LogEntry {
   type: 'info' | 'warn' | 'success';
 }
 
+interface MixerValues {
+  volume: number;
+  bass: number;
+  mid: number;
+  treble: number;
+  crossfader: number;
+  tempo: number;
+}
+
+interface GymStats {
+  hr: number;
+  steps: number;
+  session: string;
+}
+
+interface PlaybackState {
+  id: string | null;
+  currentTime: number;
+  duration: number;
+}
+
+type Theme = 'dark' | 'light';
+type SearchMode = 'GLOBAL' | 'LOCAL';
+
+interface AppContentProps {
+  theme: Theme;
+  setTheme: Dispatch<SetStateAction<Theme>>;
+  isVaultOpen: boolean;
+  setIsVaultOpen: Dispatch<SetStateAction<boolean>>;
+  onOpenShop: () => void;
+  credits: number;
+  equippedSkin: DJSkin | undefined;
+  agentReputations: AgentReputations;
+  onRateAgent: (agentLabel: string, vote: 'up' | 'down') => void;
+  activeTab: string;
+  setActiveTab: Dispatch<SetStateAction<string>>;
+  tracks: TrackData[];
+  playback: PlaybackState;
+  suggestions: TrackRecommendation[];
+  loadingSuggestions: boolean;
+  selectedTrack: TrackRecommendation | null;
+  setSelectedTrack: Dispatch<SetStateAction<TrackRecommendation | null>>;
+  isDeploying: boolean;
+  searchQuery: string;
+  setSearchQuery: Dispatch<SetStateAction<string>>;
+  logs: LogEntry[];
+  mixerValues: MixerValues;
+  setMixerValues: Dispatch<SetStateAction<MixerValues>>;
+  fetchSuggestions: (query: string) => Promise<void>;
+  togglePlay: (id: string) => void;
+  onNextTrack: () => void;
+  onRestartTrack: () => void;
+  addTrack: (rec: TrackRecommendation, notes?: string) => void;
+  searchMode: SearchMode;
+  setSearchMode: Dispatch<SetStateAction<SearchMode>>;
+  isOffline: boolean;
+  setIsOffline: Dispatch<SetStateAction<boolean>>;
+  localTracks: TrackData[];
+  isGymMode: boolean;
+  setIsGymMode: Dispatch<SetStateAction<boolean>>;
+  showScanner: boolean;
+  setShowScanner: Dispatch<SetStateAction<boolean>>;
+  gymStats: GymStats;
+  agentAvatars: Record<string, string>;
+  setSuggestions: Dispatch<SetStateAction<TrackRecommendation[]>>;
+  onGesture: (gesture: string) => void;
+  onFileUpload: (files: FileList | null) => void;
+  onLike: (track?: TrackRecommendation) => void;
+  onSetVerdict: (rec: TrackRecommendation, verdict: 'like' | 'dislike' | 'clear') => void;
+  onSendToPlaylist: (rec: TrackRecommendation) => void;
+  onOpenPlaylist: () => void;
+  playlistCount: number;
+  telemetry: DeviceTelemetry;
+  onOpenDeviceIdentity: () => void;
+  motionState: MotionState;
+  onEnableMotion: () => Promise<void> | void;
+  onDisableMotion: () => void;
+  onWeatherReading: (reading: WeatherReading | null) => void;
+  isMobile?: boolean;
+}
+
 export default function App() {
   const { notify, playSound } = useAppFeedback();
-  const [theme, setTheme] = useState<'dark' | 'light'>('dark');
+  const [theme, setTheme] = useState<Theme>('dark');
   const [activeTab, setActiveTab] = useState('RADIO');
   const [isVaultOpen, setIsVaultOpen] = useState(false);
   const [isDeviceIdentityOpen, setIsDeviceIdentityOpen] = useState(false);
@@ -443,11 +524,11 @@ export default function App() {
   };
   const [isDeploying, setIsDeploying] = useState(false);
   const [searchQuery, setSearchQuery] = useState('spor dnb');
-  const [searchMode, setSearchMode] = useState<'GLOBAL' | 'LOCAL'>('GLOBAL');
+  const [searchMode, setSearchMode] = useState<SearchMode>('GLOBAL');
   const [isOffline, setIsOffline] = useState(false);
   const [isGymMode, setIsGymMode] = useState(false);
   const [showScanner, setShowScanner] = useState(false);
-  const [gymStats, setGymStats] = useState({ hr: 72, steps: 2450, session: '00:00:00' });
+  const [gymStats, setGymStats] = useState<GymStats>({ hr: 72, steps: 2450, session: '00:00:00' });
   const [agentAvatars, setAgentAvatars] = useState<Record<string, string>>({});
   const [localTracks, setLocalTracks] = useState<TrackData[]>([
     { id: 'loc-1', title: 'Home Recording 01', artist: 'Local File', agentLabel: 'CLEANER', duration: '02:45', isPlaying: false, color: 'emerald' },
@@ -456,7 +537,7 @@ export default function App() {
     { id: '1', agent: 'JULES', msg: 'System initialized. Waiting for music search input.', time: '21:35:02', type: 'info' },
     { id: '2', agent: 'SYNC', msg: 'Layer synchronization established.', time: '21:35:05', type: 'success' },
   ]);
-  const [mixerValues, setMixerValues] = useState({
+  const [mixerValues, setMixerValues] = useState<MixerValues>({
     volume: 100,
     bass: 50,
     mid: 45,
@@ -478,7 +559,7 @@ export default function App() {
   // Audio playback engine — single shared HTMLAudioElement, one track at a time.
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const blobUrlsRef = useRef<Set<string>>(new Set());
-  const [playback, setPlayback] = useState<{ id: string | null; currentTime: number; duration: number }>({
+  const [playback, setPlayback] = useState<PlaybackState>({
     id: null,
     currentTime: 0,
     duration: 0,
@@ -1208,8 +1289,8 @@ function AppContent({
   onEnableMotion,
   onDisableMotion,
   onWeatherReading,
-  isMobile = false
-}: any) {
+  isMobile = false,
+}: AppContentProps) {
   const { soundEnabled, setSoundEnabled, notificationsEnabled, setNotificationsEnabled, playSound } = useAppFeedback();
   const [prefsOpen, setPrefsOpen] = useState(false);
 
@@ -1704,10 +1785,10 @@ function AppContent({
                 </div>
              </div>
              <div className="flex gap-1 mb-2">
-                  {['GLOBAL', 'LOCAL'].map(mode => (
+                  {(['GLOBAL', 'LOCAL'] as const).map(mode => (
                     <button
                       key={mode}
-                      onClick={() => setSearchMode(mode as any)}
+                      onClick={() => setSearchMode(mode)}
                       className={`flex-1 text-[8px] font-mono font-bold py-1 rounded border transition-all ${
                         searchMode === mode 
                           ? isOffline ? 'bg-emerald-500/20 border-emerald-500 text-emerald-500' : 'bg-jarvis-accent-cyan/20 border-jarvis-accent-cyan text-jarvis-accent-cyan' 
@@ -1749,7 +1830,7 @@ function AppContent({
                  Local Music Library <span>{localTracks.length}</span>
                </h3>
                <div className="flex flex-col gap-1 max-h-32 overflow-y-auto pr-1 custom-scrollbar">
-                  {localTracks.map((lt: any) => (
+                  {localTracks.map((lt) => (
                     <div
                       key={lt.id}
                       className="p-2 rounded bg-slate-900/50 border border-jarvis-border/20 flex items-center gap-2 hover:border-jarvis-accent-cyan/30"
@@ -1825,9 +1906,24 @@ function AppContent({
           ) : activeTab === 'SIGNALS' ? (
             <SocialPickups onAdd={(track) => addTrack({ ...track, agentLabel: 'SOCIAL-BOT', genre: track.tags[0], confidence: 1 })} />
           ) : activeTab === 'CRATE' ? (
-            <RecordPicker 
-              suggestions={suggestions} 
-              onAdd={(track, artist) => addTrack({ title: track, artist, agentLabel: 'CRATE-BOT', genre: 'Selected', confidence: 1, tags: [], id: Math.random().toString() })}
+            <RecordPicker
+              suggestions={suggestions.map(s => ({
+                track: s.title,
+                artist: s.artist,
+                reason: s.notes ?? s.genre,
+                genre: s.genre,
+              }))}
+              onAdd={(track, artist) => addTrack({
+                title: track,
+                artist,
+                agentLabel: 'CRATE-BOT',
+                genre: 'Selected',
+                confidence: 1,
+                tags: [],
+                releaseDate: '',
+                previewUrl: '',
+                id: Math.random().toString(),
+              })}
               isLoading={loadingSuggestions}
             />
           ) : activeTab === 'MIXER' && isMobile ? (
@@ -1838,11 +1934,11 @@ function AppContent({
                </div>
                
                <div className="grid grid-cols-3 gap-6 px-4">
-                  <MixerKnob label="GAIN" value={mixerValues.volume} onChange={(v) => setMixerValues((prev: any) => ({ ...prev, volume: v }))} />
-                  <MixerKnob label="TEMPO" value={mixerValues.tempo} unit="BPM" min={60} max={200} onChange={(v) => setMixerValues((prev: any) => ({ ...prev, tempo: v }))} />
-                  <MixerKnob label="BASS" value={mixerValues.bass} color="pink" onChange={(v) => setMixerValues((prev: any) => ({ ...prev, bass: v }))} />
-                  <MixerKnob label="MID" value={mixerValues.mid} onChange={(v) => setMixerValues((prev: any) => ({ ...prev, mid: v }))} />
-                  <MixerKnob label="TREB" value={mixerValues.treble} onChange={(v) => setMixerValues((prev: any) => ({ ...prev, treble: v }))} />
+                  <MixerKnob label="GAIN" value={mixerValues.volume} onChange={(v) => setMixerValues((prev) => ({ ...prev, volume: v }))} />
+                  <MixerKnob label="TEMPO" value={mixerValues.tempo} unit="BPM" min={60} max={200} onChange={(v) => setMixerValues((prev) => ({ ...prev, tempo: v }))} />
+                  <MixerKnob label="BASS" value={mixerValues.bass} color="pink" onChange={(v) => setMixerValues((prev) => ({ ...prev, bass: v }))} />
+                  <MixerKnob label="MID" value={mixerValues.mid} onChange={(v) => setMixerValues((prev) => ({ ...prev, mid: v }))} />
+                  <MixerKnob label="TREB" value={mixerValues.treble} onChange={(v) => setMixerValues((prev) => ({ ...prev, treble: v }))} />
                </div>
 
                <div className="flex flex-col gap-4 px-6 mt-6">
@@ -1899,10 +1995,10 @@ function AppContent({
                     </h2>
                   </div>
                   <div className="flex gap-1">
-                    {['GLOBAL', 'LOCAL'].map((mode) => (
+                    {(['GLOBAL', 'LOCAL'] as const).map((mode) => (
                       <button
                         key={mode}
-                        onClick={() => setSearchMode(mode as any)}
+                        onClick={() => setSearchMode(mode)}
                         className={`px-2 py-0.5 rounded-full text-[8px] font-mono font-bold uppercase tracking-widest border transition-all ${
                           searchMode === mode
                             ? 'bg-jarvis-accent-cyan/20 border-jarvis-accent-cyan text-jarvis-accent-cyan'
@@ -2021,7 +2117,7 @@ function AppContent({
                 );
               })()}
 
-              <Turntable3D isPlaying={tracks.some((t: any) => t.isPlaying)} skin={equippedSkin} />
+              <Turntable3D isPlaying={tracks.some((t) => t.isPlaying)} skin={equippedSkin} />
 
               {/* Top Mix Area */}
           <div className={`grid ${isMobile ? 'grid-cols-1' : 'grid-cols-1 md:grid-cols-2'} gap-6 items-start`}>
@@ -2039,11 +2135,11 @@ function AppContent({
                 </div>
                 
                 <div className="flex justify-around items-end gap-2">
-                   <MixerKnob label="VOL" value={mixerValues.volume} onChange={(v) => setMixerValues((prev: any) => ({ ...prev, volume: v }))} />
-                   <MixerKnob label="BPM" value={mixerValues.tempo} unit="BPM" min={60} max={200} onChange={(v) => setMixerValues((prev: any) => ({ ...prev, tempo: v }))} />
-                   <MixerKnob label="BASS" value={mixerValues.bass} color="pink" onChange={(v) => setMixerValues((prev: any) => ({ ...prev, bass: v }))} />
-                   <MixerKnob label="MID" value={mixerValues.mid} onChange={(v) => setMixerValues((prev: any) => ({ ...prev, mid: v }))} />
-                   <MixerKnob label="TREB" value={mixerValues.treble} onChange={(v) => setMixerValues((prev: any) => ({ ...prev, treble: v }))} />
+                   <MixerKnob label="VOL" value={mixerValues.volume} onChange={(v) => setMixerValues((prev) => ({ ...prev, volume: v }))} />
+                   <MixerKnob label="BPM" value={mixerValues.tempo} unit="BPM" min={60} max={200} onChange={(v) => setMixerValues((prev) => ({ ...prev, tempo: v }))} />
+                   <MixerKnob label="BASS" value={mixerValues.bass} color="pink" onChange={(v) => setMixerValues((prev) => ({ ...prev, bass: v }))} />
+                   <MixerKnob label="MID" value={mixerValues.mid} onChange={(v) => setMixerValues((prev) => ({ ...prev, mid: v }))} />
+                   <MixerKnob label="TREB" value={mixerValues.treble} onChange={(v) => setMixerValues((prev) => ({ ...prev, treble: v }))} />
                    
                    <div className="hidden lg:flex flex-col items-center gap-2 ml-4">
                       <div className="flex flex-col gap-1 h-32 w-1 bg-slate-800/50 rounded-full relative">
