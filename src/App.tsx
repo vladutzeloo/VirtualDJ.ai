@@ -1949,11 +1949,11 @@ function AppContent({
                 const playingIdx = activeIdx;
                 const next = tracks.find((t: TrackData, i: number) => i !== playingIdx && t.audioUrl) ?? tracks.find((_: TrackData, i: number) => i !== playingIdx);
                 return (
-                  <div className="flex flex-col gap-3">
+                  <div className="sticky top-0 z-30 -mx-4 lg:-mx-6 px-4 lg:px-6 pt-2 pb-3 bg-white/85 dark:bg-vdj-bg/85 backdrop-blur-xl border-b border-slate-200 dark:border-jarvis-border/40 flex flex-col gap-3 shadow-[0_8px_20px_-12px_rgba(0,0,0,0.6)]">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
                         <span className={`w-2 h-2 rounded-full ${playingTrack ? 'bg-emerald-400 animate-pulse shadow-[0_0_10px_var(--color-emerald-400)]' : 'bg-slate-600'}`} />
-                        <h2 className="text-sm font-display font-black uppercase tracking-[0.25em] text-white">NOW PLAYING</h2>
+                        <h2 className="text-sm font-display font-black uppercase tracking-[0.25em] text-slate-900 dark:text-white">NOW PLAYING</h2>
                       </div>
                       <span className="text-[9px] font-mono uppercase tracking-widest text-slate-500">
                         {playingTrack ? 'LIVE' : loadingSuggestions ? 'LOADING' : 'IDLE'}
@@ -1995,6 +1995,28 @@ function AppContent({
                         )}
                       </div>
                     )}
+                    <div className="flex items-center gap-3 px-1">
+                      <button
+                        type="button"
+                        aria-label={mixerValues.volume === 0 ? 'Unmute' : 'Mute'}
+                        onClick={() => setMixerValues((prev: any) => ({ ...prev, volume: prev.volume === 0 ? 80 : 0 }))}
+                        className="text-jarvis-accent-cyan hover:scale-110 active:scale-95 transition-transform shrink-0"
+                      >
+                        {mixerValues.volume === 0 ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
+                      </button>
+                      <input
+                        type="range"
+                        min={0}
+                        max={100}
+                        value={mixerValues.volume}
+                        onChange={(e) => setMixerValues((prev: any) => ({ ...prev, volume: parseInt(e.target.value) }))}
+                        aria-label="Master volume"
+                        className="flex-1 h-1.5 appearance-none bg-slate-300 dark:bg-slate-800 rounded-full cursor-pointer accent-jarvis-accent-cyan [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-jarvis-accent-cyan [&::-webkit-slider-thumb]:shadow-[0_0_10px_rgba(0,242,255,0.6)] [&::-moz-range-thumb]:appearance-none [&::-moz-range-thumb]:w-4 [&::-moz-range-thumb]:h-4 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:bg-jarvis-accent-cyan [&::-moz-range-thumb]:border-0"
+                      />
+                      <span className="text-[10px] font-mono font-bold text-jarvis-accent-cyan tabular-nums w-8 text-right">
+                        {mixerValues.volume}
+                      </span>
+                    </div>
                   </div>
                 );
               })()}
